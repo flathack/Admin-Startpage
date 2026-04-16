@@ -19,4 +19,5 @@ Thumbs.db
 backend/app/__pycache__/
 backend/app/services/__pycache__/
 data/users/
+data/rollout-jobs/
 logs/

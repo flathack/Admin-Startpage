@@ -25,7 +25,9 @@
         "nutanix.view",
         "endpoint.view",
         "vsphere.view",
-        "rollout.view"
+        "rollout.view",
+        "rollout.create",
+        "rollout.manage"
       ]
     },
     "citrix_admin": {

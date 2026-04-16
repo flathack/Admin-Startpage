@@ -9,6 +9,8 @@ const state = {
   adTreeExpanded: true,
   connector: null,
   sessionExpiresAt: "",
+  rolloutJobs: [],
+  rolloutSummary: null,
 };
 
 const NAV_STRUCTURE = [
@@ -436,6 +438,8 @@ function renderIntegrationModule(systemId, extraMarkup = "") {
 
 function renderRolloutView() {
   const vsphere = integrationById("vsphere");
+  const canCreate = hasPermission("rollout.create");
+  const canManage = hasPermission("rollout.manage");
   elements.contentPrimary.innerHTML = `
     <section class="workspace-section">
       <div>
@@ -443,16 +447,52 @@ function renderRolloutView() {
         <h3 class="section-title">Operations-Hub fuer Rollout und Infrastruktur</h3>
       </div>
       <div class="summary-grid">
-        ${buildSummaryCard("vSphere", String(vsphere?.meta?.vmCount || 0), "Grundlage fuer spaetere Rollout-nahe Workflows.")}
-        ${buildSummaryCard("Connector", state.connector?.enabled ? "aktiv" : "inaktiv", "Windows-Connector fuer Citrix und AD-RSAT vorbereitet.")}
-        ${buildSummaryCard("Status", "MVP", "Layout und Navigation fuer die Rollout-Migration stehen bereit.")}
+        ${buildSummaryCard("Jobs", String(state.rolloutSummary?.jobCount || 0), "Persistierte Rollout-Jobs im Web-Backend.")}
+        ${buildSummaryCard("Aktiv", String(state.rolloutSummary?.runningCount || 0), "Laufende oder vorbereitete Rollout-Workflows.")}
+        ${buildSummaryCard("Fehler", String(state.rolloutSummary?.errorCount || 0), "Jobs mit technischem oder fachlichem Fehlerstatus.")}
+      </div>
+      ${canCreate ? `
+      <div class="form-card">
+        <div>
+          <p class="eyebrow">Neuer Rollout-Job</p>
+          <h4>Job fuer Web-Rollout anlegen</h4>
+        </div>
+        <form id="rolloutJobForm" class="form-stack">
+          <div class="form-grid">
+            <input id="rolloutHostname" placeholder="Hostname" required>
+            <input id="rolloutTemplate" placeholder="Template" required>
+            <input id="rolloutCluster" placeholder="Cluster" required>
+            <input id="rolloutNetwork" placeholder="Netzwerk" required>
+          </div>
+          <input id="rolloutTags" placeholder="Tags, komma-getrennt">
+          <button type="submit">Rollout-Job anlegen</button>
+        </form>
+      </div>` : ""}
+      <div class="info-card">
+        <h4>Rollout-Jobs</h4>
+        <div class="detail-list">
+          ${state.rolloutJobs.map((job) => `
+            <div class="widget-card">
+              <div>
+                <p class="eyebrow">${job.jobId}</p>
+                <h4>${job.hostname}</h4>
+                <p>${job.template} auf ${job.cluster} / ${job.network}</p>
+                <p>Status: ${job.status} | Progress: ${job.progress}%</p>
+                <p>${job.clientMessage || "Noch keine Ausfuehrungsdaten vorhanden."}</p>
+              </div>
+              <div class="widget-actions">
+                ${canManage ? `<button type="button" class="secondary" data-action="restart-rollout" data-job-id="${job.jobId}">Reset</button>` : ""}
+              </div>
+            </div>
+          `).join("") || `<div class="placeholder-block">Noch keine Rollout-Jobs vorhanden.</div>`}
+        </div>
       </div>
       <div class="info-card">
         <h4>Naechste Rollout-Schritte</h4>
         <ol class="list-clean">
-          <li>Read-Only Daten fuer Infrastruktur stabilisieren</li>
-          <li>Citrix und AD ueber Connector absichern</li>
-          <li>Erste schreibende Rollout-Aktionen mit serverseitigen Permissions freischalten</li>
+          <li>Job-Startlogik mit Nutanix-Clone-Service verbinden</li>
+          <li>Share-Kommunikation fuer WinPE und Runtime-Dateien anbinden</li>
+          <li>ReRollout-, Delete- und Continue-Workflows portieren</li>
         </ol>
       </div>
     </section>
@@ -466,6 +506,10 @@ function renderRolloutView() {
       </div>
       <div class="detail-list">
         ${(vsphere?.items || []).map((item) => `<div class="detail-row"><span>${item.label}</span><strong>${item.value}</strong></div>`).join("") || `<div class="placeholder-block">Keine vSphere-Daten vorhanden.</div>`}
+      </div>
+      <div class="info-card">
+        <h4>Persistenz</h4>
+        <p>${state.rolloutSummary?.tasksDirectory || "Kein Tasks-Verzeichnis bekannt."}</p>
       </div>
     </section>
   `;
@@ -530,6 +574,17 @@ async function loadIntegrations(selectDefault = false) {
   renderCurrentView();
 }
 
+async function loadRolloutJobs() {
+  if (!hasPermission("rollout.view")) {
+    state.rolloutJobs = [];
+    state.rolloutSummary = null;
+    return;
+  }
+  const payload = await request("/api/rollout/jobs");
+  state.rolloutJobs = payload.jobs || [];
+  state.rolloutSummary = payload.summary || null;
+}
+
 async function selectIntegration(systemId) {
   state.activeIntegration = await request(`/api/integrations/${systemId}`);
   renderCurrentView();
@@ -550,6 +605,7 @@ async function login(username, password) {
   setMessage("Anmeldung erfolgreich.", "success");
   renderApp();
   await loadIntegrations(false);
+  await loadRolloutJobs();
 }
 
 async function bootstrapSession() {
@@ -567,6 +623,7 @@ async function bootstrapSession() {
     state.activeNav = "dashboard";
     renderApp();
     await loadIntegrations(false);
+    await loadRolloutJobs();
   } catch (_error) {
     resetClientState();
   }
@@ -599,6 +656,7 @@ elements.logoutButton.addEventListener("click", async () => {
 elements.refreshIntegrationsButton.addEventListener("click", async () => {
   try {
     await loadIntegrations(true);
+    await loadRolloutJobs();
   } catch (error) {
     window.alert(error.message);
   }
@@ -650,6 +708,33 @@ elements.sidebarNav.addEventListener("click", async (event) => {
 elements.contentPrimary.addEventListener("submit", (event) => {
   const form = event.target;
   if (!(form instanceof HTMLFormElement) || form.id !== "widgetForm") {
+    if (!(form instanceof HTMLFormElement) || form.id !== "rolloutJobForm") {
+      return;
+    }
+    event.preventDefault();
+    const hostname = form.querySelector("#rolloutHostname")?.value?.trim() || "";
+    const template = form.querySelector("#rolloutTemplate")?.value?.trim() || "";
+    const cluster = form.querySelector("#rolloutCluster")?.value?.trim() || "";
+    const network = form.querySelector("#rolloutNetwork")?.value?.trim() || "";
+    const tagsRaw = form.querySelector("#rolloutTags")?.value?.trim() || "";
+    request("/api/rollout/jobs", {
+      method: "POST",
+      body: JSON.stringify({
+        hostname,
+        template,
+        cluster,
+        network,
+        tags: tagsRaw.split(",").map((item) => item.trim()).filter(Boolean),
+      }),
+    })
+      .then(async () => {
+        form.reset();
+        await loadRolloutJobs();
+        renderCurrentView();
+      })
+      .catch((error) => {
+        window.alert(error.message);
+      });
     return;
   }
   event.preventDefault();
@@ -694,6 +779,20 @@ elements.contentPrimary.addEventListener("click", async (event) => {
     } catch (error) {
       window.alert(error.message);
     }
+    return;
+  }
+
+  if (target.dataset.action === "restart-rollout") {
+    request(`/api/rollout/jobs/${target.dataset.jobId}/restart`, {
+      method: "POST",
+    })
+      .then(async () => {
+        await loadRolloutJobs();
+        renderCurrentView();
+      })
+      .catch((error) => {
+        window.alert(error.message);
+      });
   }
 });
 

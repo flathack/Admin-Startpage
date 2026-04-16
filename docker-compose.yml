@@ -17,6 +17,7 @@ services:
       STARTPAGE_LDAP_DOMAIN_SUFFIX: "${STARTPAGE_LDAP_DOMAIN_SUFFIX:-de.toyota-fs.com}"
       STARTPAGE_SESSION_TTL_MINUTES: "${STARTPAGE_SESSION_TTL_MINUTES:-480}"
       STARTPAGE_MOCK_GROUPS: "${STARTPAGE_MOCK_GROUPS:-Startpage-Users,Startpage-Dashboard-Editors,Startpage-Platform-Admins,Startpage-Citrix-Admins}"
+      STARTPAGE_ROLLOUT_TASKS_DIR: "${STARTPAGE_ROLLOUT_TASKS_DIR:-}"
     volumes:
       - ./data:/app/data
     restart: unless-stopped

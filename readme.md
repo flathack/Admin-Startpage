@@ -15,6 +15,7 @@ Der aktuelle Stand ist ein funktionsfaehiger Prototyp mit:
 - Personalisierter Dashboard-Konfiguration pro Benutzer
 - Integrationsansichten fuer AD, Nutanix, Endpoint Central, vSphere und Citrix
 - Optionalem Windows-Connector fuer AD-RSAT- und Citrix-On-Prem-nahe Funktionen
+- Persistierten Rollout-Jobs im Web-Backend als erster Migrationsstufe aus Rollout-Monitor
 
 ## Zielbild
 
@@ -52,6 +53,8 @@ Der aktuelle UI-Aufbau ist auf eine kompakte Operations-Sicht ausgelegt:
 - Endpoint Central
 - Citrix
 - Rollout
+
+Im Rollout-Modul koennen bereits erste Jobs persistent im Backend angelegt, gelistet und fuer einen Neustart zurueckgesetzt werden. Die eigentliche Clone-, WinPE- und Continue-Logik aus Rollout-Monitor folgt in weiteren Schritten.
 
 Innerhalb von ActiveDirectory ist bereits eine Sidebar-Tree-Struktur fuer diese Bereiche vorbereitet:
 
@@ -154,6 +157,7 @@ Fuer produktionsnaehere Tests muessen mindestens diese Variablen gesetzt werden:
 - `STARTPAGE_LDAP_SERVER`
 - `STARTPAGE_LDAP_BASE_DN`
 - `STARTPAGE_LDAP_DOMAIN_SUFFIX`
+- `STARTPAGE_ROLLOUT_TASKS_DIR`
 
 Das Backend meldet unvollstaendige Runtime-Konfigurationen zusaetzlich ueber den Health-Endpoint, damit Deployments mit deaktiviertem Mock-Modus schneller auffallen.
 

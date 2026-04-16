@@ -34,6 +34,7 @@ class AppSettings:
     connector_timeout_seconds: int
     session_ttl_minutes: int
     allowed_origins: tuple[str, ...]
+    rollout_tasks_dir: str
 
     @classmethod
     def from_environment(cls) -> "AppSettings":
@@ -52,6 +53,7 @@ class AppSettings:
             connector_timeout_seconds=max(1, _read_int("STARTPAGE_CONNECTOR_TIMEOUT_SECONDS", 6)),
             session_ttl_minutes=max(15, _read_int("STARTPAGE_SESSION_TTL_MINUTES", 480)),
             allowed_origins=_read_csv("STARTPAGE_ALLOWED_ORIGINS", "*"),
+            rollout_tasks_dir=os.getenv("STARTPAGE_ROLLOUT_TASKS_DIR", "").strip(),
         )
 
     def runtime_warnings(self) -> list[str]:
