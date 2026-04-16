@@ -7,6 +7,7 @@ __pycache__/
 *.db
 .env
 .env.local
+.env.*.local
 .venv/
 venv/
 .pytest_cache/
@@ -18,6 +19,16 @@ htmlcov/
 Thumbs.db
 backend/app/__pycache__/
 backend/app/services/__pycache__/
+
+# Data directories
+data/*
+!data/.gitkeep
+!data/users/.gitkeep
+!data/rollout-jobs/.gitkeep
+!data/logs/.gitkeep
+
+# Logs
+logs/
 data/users/
 data/rollout-jobs/
 logs/

@@ -23,8 +23,15 @@ services:
       STARTPAGE_ROLLOUT_STATUS_DIR: "${STARTPAGE_ROLLOUT_STATUS_DIR:-}"
       STARTPAGE_ROLLOUT_MOCK_STEP_DELAY_SECONDS: "${STARTPAGE_ROLLOUT_MOCK_STEP_DELAY_SECONDS:-1}"
       STARTPAGE_AUDIT_LOG_ENABLED: "${STARTPAGE_AUDIT_LOG_ENABLED:-true}"
+      STARTPAGE_AUDIT_LOG_DIR: "${STARTPAGE_AUDIT_LOG_DIR:-/app/data/logs}"
     volumes:
       - ./data:/app/data
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8080/api/health')"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
     restart: unless-stopped
 
   startpage-connector:
@@ -38,4 +45,27 @@ services:
     environment:
       STARTPAGE_CONNECTOR_MOCK: "${STARTPAGE_CONNECTOR_MOCK:-true}"
       STARTPAGE_CITRIX_ADMIN_ADDRESS: "${STARTPAGE_CITRIX_ADMIN_ADDRESS:-ddc01.local}"
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8090/health')"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
+    restart: unless-stopped
+
+  # Optional: Nginx reverse proxy for production
+  startpage-nginx:
+    image: nginx:alpine
+    container_name: startpage-nginx
+    profiles:
+      - proxy
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./nginx.conf:/etc/nginx/nginx.conf:ro
+      - ./data/certs:/etc/nginx/certs:ro
+    depends_on:
+      startpage-web:
+        condition: service_healthy
     restart: unless-stopped
