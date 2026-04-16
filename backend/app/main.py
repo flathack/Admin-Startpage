@@ -13,17 +13,6 @@ from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 
-# Configure structured logging
-logging.basicConfig(
-    level=logging.INFO,
-    format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
-    handlers=[
-        logging.StreamHandler(),
-        logging.FileHandler(PROJECT_DIR / "data" / "logs" / "app.log") if (PROJECT_DIR / "data" / "logs").exists() else logging.NullHandler(),
-    ],
-)
-logger = logging.getLogger("admin-startpage")
-
 from app.services.ad_service import ADService, ADServiceError, create_from_settings
 from app.services.audit_service import AuditService, create_audit_service
 from app.services.auth_service import ADAuthService, ADIdentity, AuthenticationError
@@ -71,6 +60,17 @@ PROJECT_DIR = APP_DIR.parents[1]
 STATIC_DIR = APP_DIR / "static"
 CONFIG_DIR = APP_DIR / "config"
 DATA_DIR = PROJECT_DIR / "data" / "users"
+
+# Configure structured logging after project paths are available.
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
+    handlers=[
+        logging.StreamHandler(),
+        logging.FileHandler(PROJECT_DIR / "data" / "logs" / "app.log") if (PROJECT_DIR / "data" / "logs").exists() else logging.NullHandler(),
+    ],
+)
+logger = logging.getLogger("admin-startpage")
 
 settings = AppSettings.from_environment()
 started_at = datetime.now(timezone.utc)

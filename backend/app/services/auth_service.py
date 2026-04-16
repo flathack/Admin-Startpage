@@ -74,7 +74,7 @@ class ADAuthService:
 
         upn = self._build_upn(username)
         try:
-            server = ldap3.Server(self._ldap_server, use_ssl=True, get_info=ldap3.NONE)
+            server = ldap3.Server(self._normalize_ldap_server(self._ldap_server), use_ssl=True, get_info=ldap3.NONE)
             connection = ldap3.Connection(
                 server,
                 user=upn,
@@ -120,6 +120,15 @@ class ADAuthService:
         if "@" in username or "\\" in username:
             return username
         return f"{username}@{self._domain_suffix}"
+
+    @staticmethod
+    def _normalize_ldap_server(value: str) -> str:
+        normalized = value.strip()
+        for prefix in ("ldaps://", "ldap://"):
+            if normalized.lower().startswith(prefix):
+                normalized = normalized[len(prefix):]
+                break
+        return normalized.rstrip("/")
 
     @staticmethod
     def _resolve_groups(member_of: list[str]) -> set[str]:
