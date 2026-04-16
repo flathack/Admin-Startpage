@@ -35,6 +35,9 @@ class AppSettings:
     session_ttl_minutes: int
     allowed_origins: tuple[str, ...]
     rollout_tasks_dir: str
+    rollout_name_map_dir: str
+    rollout_control_dir: str
+    rollout_status_dir: str
 
     @classmethod
     def from_environment(cls) -> "AppSettings":
@@ -54,6 +57,9 @@ class AppSettings:
             session_ttl_minutes=max(15, _read_int("STARTPAGE_SESSION_TTL_MINUTES", 480)),
             allowed_origins=_read_csv("STARTPAGE_ALLOWED_ORIGINS", "*"),
             rollout_tasks_dir=os.getenv("STARTPAGE_ROLLOUT_TASKS_DIR", "").strip(),
+            rollout_name_map_dir=os.getenv("STARTPAGE_ROLLOUT_NAME_MAP_DIR", "").strip(),
+            rollout_control_dir=os.getenv("STARTPAGE_ROLLOUT_CONTROL_DIR", "").strip(),
+            rollout_status_dir=os.getenv("STARTPAGE_ROLLOUT_STATUS_DIR", "").strip(),
         )
 
     def runtime_warnings(self) -> list[str]:
@@ -69,4 +75,8 @@ class AppSettings:
             warnings.append("Connector ist aktiviert, aber STARTPAGE_CONNECTOR_URL fehlt.")
         if not self.mock_integrations_enabled and not self.connector_enabled:
             warnings.append("Live-Integrationen ohne Connector lassen Citrix- und RSAT-Pfade unvollstaendig.")
+        if any((self.rollout_name_map_dir, self.rollout_control_dir, self.rollout_status_dir)) and not all(
+            (self.rollout_name_map_dir, self.rollout_control_dir, self.rollout_status_dir)
+        ):
+            warnings.append("Rollout-Runtime-Pfade sind nur teilweise gesetzt; NAME-MAP, CONTROL und STATUS sollten gemeinsam konfiguriert werden.")
         return warnings

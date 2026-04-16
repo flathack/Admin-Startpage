@@ -30,6 +30,8 @@ class RolloutJob:
     bootstrap_name: str = ""
     status: RolloutStatus = RolloutStatus.PLANNED
     progress: int = 0
+    client_mac: str = ""
+    machine_uuid: str = ""
     client_stage: str = ""
     client_message: str = ""
     created_at: float = field(default_factory=time)
@@ -49,6 +51,8 @@ class RolloutJob:
             "bootstrap_name": self.bootstrap_name,
             "status": self.status.value,
             "progress": self.progress,
+            "client_mac": self.client_mac,
+            "machine_uuid": self.machine_uuid,
             "client_stage": self.client_stage,
             "client_message": self.client_message,
             "tags": list(self.tags),
@@ -66,6 +70,8 @@ class RolloutJob:
             "bootstrapName": self.bootstrap_name,
             "status": self.status.value,
             "progress": self.progress,
+            "clientMac": self.client_mac,
+            "machineUuid": self.machine_uuid,
             "clientStage": self.client_stage,
             "clientMessage": self.client_message,
             "tags": list(self.tags),
@@ -107,6 +113,8 @@ class RolloutJob:
             bootstrap_name=str(payload.get("bootstrap_name", payload.get("hostname", ""))).strip(),
             status=cls._parse_status(str(payload.get("status", RolloutStatus.PLANNED.value))),
             progress=max(0, min(100, int(payload.get("progress", 0)))),
+            client_mac=str(payload.get("client_mac", "")).strip(),
+            machine_uuid=str(payload.get("machine_uuid", "")).strip(),
             client_stage=str(payload.get("client_stage", "")).strip(),
             client_message=str(payload.get("client_message", "")).strip(),
             created_at=float(payload.get("created_at", time())),

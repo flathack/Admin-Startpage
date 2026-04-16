@@ -18,6 +18,7 @@ from app.services.dashboard_store import DashboardStore
 from app.services.integration_service import IntegrationService
 from app.services.permission_service import PermissionService, UserSession
 from app.services.rollout_job_store import RolloutJobStore
+from app.services.rollout_runtime_service import RolloutRuntimeService
 from app.services.rollout_service import RolloutService
 from app.settings import AppSettings
 
@@ -40,6 +41,10 @@ class RolloutJobCreateRequest(BaseModel):
     tags: list[str] = Field(default_factory=list)
 
 
+class RolloutControlRequest(BaseModel):
+    action: str = Field(min_length=1)
+
+
 class StoredSession(BaseModel):
     token: str
     expires_at: datetime
@@ -55,6 +60,9 @@ DATA_DIR = PROJECT_DIR / "data" / "users"
 settings = AppSettings.from_environment()
 started_at = datetime.now(timezone.utc)
 ROLLOUT_TASKS_DIR = Path(settings.rollout_tasks_dir) if settings.rollout_tasks_dir else PROJECT_DIR / "data" / "rollout-jobs"
+ROLLOUT_NAME_MAP_DIR = Path(settings.rollout_name_map_dir) if settings.rollout_name_map_dir else None
+ROLLOUT_CONTROL_DIR = Path(settings.rollout_control_dir) if settings.rollout_control_dir else None
+ROLLOUT_STATUS_DIR = Path(settings.rollout_status_dir) if settings.rollout_status_dir else None
 
 auth_service = ADAuthService(
     ldap_server=settings.ldap_server,
@@ -78,6 +86,12 @@ integration_service = IntegrationService(
 )
 rollout_job_store = RolloutJobStore(ROLLOUT_TASKS_DIR)
 rollout_service = RolloutService(rollout_job_store)
+rollout_runtime_service = RolloutRuntimeService(
+    name_map_dir=ROLLOUT_NAME_MAP_DIR,
+    control_dir=ROLLOUT_CONTROL_DIR,
+    status_dir=ROLLOUT_STATUS_DIR,
+    job_store=rollout_job_store,
+)
 session_ttl = settings.session_ttl_minutes
 sessions: dict[str, StoredSession] = {}
 
@@ -289,7 +303,7 @@ def rollout_jobs(x_session_token: str | None = Header(default=None)) -> dict[str
     user_session = _build_user_session(stored_session)
     _require_permission(user_session, "rollout.view")
     jobs = [job.to_api() for job in rollout_service.list_jobs()]
-    return {"jobs": jobs, "summary": rollout_service.summary()}
+    return {"jobs": jobs, "summary": rollout_service.summary(), "runtime": rollout_runtime_service.health()}
 
 
 @app.post("/api/rollout/jobs")
@@ -321,6 +335,45 @@ def rollout_job_detail(job_id: str, x_session_token: str | None = Header(default
     except KeyError as exc:
         raise HTTPException(status_code=404, detail=f"Unbekannter Rollout-Job: {job_id}") from exc
     return {"job": job.to_api()}
+
+
+@app.get("/api/rollout/runtime/health")
+def rollout_runtime_health(x_session_token: str | None = Header(default=None)) -> dict[str, Any]:
+    stored_session = _get_session(x_session_token)
+    user_session = _build_user_session(stored_session)
+    _require_permission(user_session, "rollout.view")
+    return rollout_runtime_service.health()
+
+
+@app.get("/api/rollout/jobs/{job_id}/runtime")
+def rollout_job_runtime(job_id: str, x_session_token: str | None = Header(default=None)) -> dict[str, Any]:
+    stored_session = _get_session(x_session_token)
+    user_session = _build_user_session(stored_session)
+    _require_permission(user_session, "rollout.view")
+    try:
+        job = rollout_service.get_job(job_id)
+    except KeyError as exc:
+        raise HTTPException(status_code=404, detail=f"Unbekannter Rollout-Job: {job_id}") from exc
+    return {"runtime": rollout_runtime_service.snapshot_for_job(job)}
+
+
+@app.post("/api/rollout/jobs/{job_id}/control")
+def rollout_job_control(
+    job_id: str,
+    payload: RolloutControlRequest,
+    x_session_token: str | None = Header(default=None),
+) -> dict[str, Any]:
+    stored_session = _get_session(x_session_token)
+    user_session = _build_user_session(stored_session)
+    _require_permission(user_session, "rollout.manage")
+    try:
+        job = rollout_service.get_job(job_id)
+    except KeyError as exc:
+        raise HTTPException(status_code=404, detail=f"Unbekannter Rollout-Job: {job_id}") from exc
+    result = rollout_runtime_service.write_control_message(job=job, action=payload.action)
+    if not result["ok"]:
+        raise HTTPException(status_code=400, detail=result["message"])
+    return result
 
 
 @app.post("/api/rollout/jobs/{job_id}/restart")

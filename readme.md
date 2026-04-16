@@ -16,6 +16,7 @@ Der aktuelle Stand ist ein funktionsfaehiger Prototyp mit:
 - Integrationsansichten fuer AD, Nutanix, Endpoint Central, vSphere und Citrix
 - Optionalem Windows-Connector fuer AD-RSAT- und Citrix-On-Prem-nahe Funktionen
 - Persistierten Rollout-Jobs im Web-Backend als erster Migrationsstufe aus Rollout-Monitor
+- Ersten Runtime-/Share-Pfaden fuer Rollout-Jobs inklusive STATUS-, CONTROL- und NAME-MAP-Anbindung
 
 ## Zielbild
 
@@ -54,7 +55,7 @@ Der aktuelle UI-Aufbau ist auf eine kompakte Operations-Sicht ausgelegt:
 - Citrix
 - Rollout
 
-Im Rollout-Modul koennen bereits erste Jobs persistent im Backend angelegt, gelistet und fuer einen Neustart zurueckgesetzt werden. Die eigentliche Clone-, WinPE- und Continue-Logik aus Rollout-Monitor folgt in weiteren Schritten.
+Im Rollout-Modul koennen bereits erste Jobs persistent im Backend angelegt, gelistet und fuer einen Neustart zurueckgesetzt werden. Zusaetzlich kann die Web-App jetzt Runtime-Dateien aus `NAME-MAP`, `STATUS` und `CONTROL` auslesen und ein erstes `RESUME`-Control-Signal pro Job schreiben. Die eigentliche Clone-, WinPE- und Continue-Logik aus Rollout-Monitor folgt in weiteren Schritten.
 
 Innerhalb von ActiveDirectory ist bereits eine Sidebar-Tree-Struktur fuer diese Bereiche vorbereitet:
 
@@ -158,6 +159,9 @@ Fuer produktionsnaehere Tests muessen mindestens diese Variablen gesetzt werden:
 - `STARTPAGE_LDAP_BASE_DN`
 - `STARTPAGE_LDAP_DOMAIN_SUFFIX`
 - `STARTPAGE_ROLLOUT_TASKS_DIR`
+- `STARTPAGE_ROLLOUT_NAME_MAP_DIR`
+- `STARTPAGE_ROLLOUT_CONTROL_DIR`
+- `STARTPAGE_ROLLOUT_STATUS_DIR`
 
 Das Backend meldet unvollstaendige Runtime-Konfigurationen zusaetzlich ueber den Health-Endpoint, damit Deployments mit deaktiviertem Mock-Modus schneller auffallen.
 

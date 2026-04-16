@@ -11,6 +11,8 @@ const state = {
   sessionExpiresAt: "",
   rolloutJobs: [],
   rolloutSummary: null,
+  rolloutRuntime: null,
+  rolloutRuntimeHealth: null,
 };
 
 const NAV_STRUCTURE = [
@@ -113,6 +115,10 @@ function resetClientState() {
   state.activeAdNode = "ad-users-computers";
   state.adTreeExpanded = true;
   state.sessionExpiresAt = "";
+  state.rolloutJobs = [];
+  state.rolloutSummary = null;
+  state.rolloutRuntime = null;
+  state.rolloutRuntimeHealth = null;
   elements.appView.classList.add("hidden");
   elements.loginView.classList.remove("hidden");
 }
@@ -440,6 +446,7 @@ function renderRolloutView() {
   const vsphere = integrationById("vsphere");
   const canCreate = hasPermission("rollout.create");
   const canManage = hasPermission("rollout.manage");
+  const runtime = state.rolloutRuntime?.runtime || null;
   elements.contentPrimary.innerHTML = `
     <section class="workspace-section">
       <div>
@@ -450,6 +457,15 @@ function renderRolloutView() {
         ${buildSummaryCard("Jobs", String(state.rolloutSummary?.jobCount || 0), "Persistierte Rollout-Jobs im Web-Backend.")}
         ${buildSummaryCard("Aktiv", String(state.rolloutSummary?.runningCount || 0), "Laufende oder vorbereitete Rollout-Workflows.")}
         ${buildSummaryCard("Fehler", String(state.rolloutSummary?.errorCount || 0), "Jobs mit technischem oder fachlichem Fehlerstatus.")}
+      </div>
+      <div class="info-card">
+        <h4>Runtime Share</h4>
+        <div class="chip-list">
+          <span class="chip ${state.rolloutRuntimeHealth?.configured ? "status-ok" : "status-planned"}">${state.rolloutRuntimeHealth?.configured ? "konfiguriert" : "nicht konfiguriert"}</span>
+          <span class="chip">NAME-MAP: ${state.rolloutRuntimeHealth?.nameMapDir?.exists ? "ok" : "-"}</span>
+          <span class="chip">CONTROL: ${state.rolloutRuntimeHealth?.controlDir?.exists ? "ok" : "-"}</span>
+          <span class="chip">STATUS: ${state.rolloutRuntimeHealth?.statusDir?.exists ? "ok" : "-"}</span>
+        </div>
       </div>
       ${canCreate ? `
       <div class="form-card">
@@ -478,9 +494,12 @@ function renderRolloutView() {
                 <h4>${job.hostname}</h4>
                 <p>${job.template} auf ${job.cluster} / ${job.network}</p>
                 <p>Status: ${job.status} | Progress: ${job.progress}%</p>
+                <p>MAC: ${job.clientMac || "unbekannt"}</p>
                 <p>${job.clientMessage || "Noch keine Ausfuehrungsdaten vorhanden."}</p>
               </div>
               <div class="widget-actions">
+                <button type="button" class="secondary" data-action="inspect-rollout-runtime" data-job-id="${job.jobId}">Runtime</button>
+                ${canManage ? `<button type="button" class="secondary" data-action="send-rollout-control" data-job-id="${job.jobId}" data-control-action="RESUME">Resume</button>` : ""}
                 ${canManage ? `<button type="button" class="secondary" data-action="restart-rollout" data-job-id="${job.jobId}">Reset</button>` : ""}
               </div>
             </div>
@@ -510,6 +529,18 @@ function renderRolloutView() {
       <div class="info-card">
         <h4>Persistenz</h4>
         <p>${state.rolloutSummary?.tasksDirectory || "Kein Tasks-Verzeichnis bekannt."}</p>
+      </div>
+      <div class="info-card">
+        <h4>Runtime Details</h4>
+        ${runtime ? `
+          <div class="detail-list">
+            <div class="detail-row"><span>Job</span><strong>${runtime.jobId}</strong></div>
+            <div class="detail-row"><span>MAC</span><strong>${runtime.clientMac || "-"}</strong></div>
+            <div class="detail-row"><span>Mapping</span><strong>${runtime.mapping?._path || "-"}</strong></div>
+            <div class="detail-row"><span>Status-Datei</span><strong>${runtime.status?._path || "-"}</strong></div>
+            <div class="detail-row"><span>ACK-Datei</span><strong>${runtime.ack?._path || "-"}</strong></div>
+          </div>
+        ` : `<div class="placeholder-block">Noch keine Runtime-Details fuer einen Job geladen.</div>`}
       </div>
     </section>
   `;
@@ -583,6 +614,12 @@ async function loadRolloutJobs() {
   const payload = await request("/api/rollout/jobs");
   state.rolloutJobs = payload.jobs || [];
   state.rolloutSummary = payload.summary || null;
+  state.rolloutRuntimeHealth = payload.runtime || null;
+}
+
+async function loadRolloutRuntime(jobId) {
+  const payload = await request(`/api/rollout/jobs/${jobId}/runtime`);
+  state.rolloutRuntime = payload;
 }
 
 async function selectIntegration(systemId) {
@@ -787,6 +824,33 @@ elements.contentPrimary.addEventListener("click", async (event) => {
       method: "POST",
     })
       .then(async () => {
+        await loadRolloutJobs();
+        renderCurrentView();
+      })
+      .catch((error) => {
+        window.alert(error.message);
+      });
+    return;
+  }
+
+  if (target.dataset.action === "inspect-rollout-runtime") {
+    loadRolloutRuntime(target.dataset.jobId)
+      .then(() => {
+        renderCurrentView();
+      })
+      .catch((error) => {
+        window.alert(error.message);
+      });
+    return;
+  }
+
+  if (target.dataset.action === "send-rollout-control") {
+    request(`/api/rollout/jobs/${target.dataset.jobId}/control`, {
+      method: "POST",
+      body: JSON.stringify({ action: target.dataset.controlAction || "RESUME" }),
+    })
+      .then(async () => {
+        await loadRolloutRuntime(target.dataset.jobId);
         await loadRolloutJobs();
         renderCurrentView();
       })
