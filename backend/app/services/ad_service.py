@@ -290,6 +290,63 @@ class ADService:
         except Exception as exc:
             logger.warning(f"DNS zone search failed: {exc}")
             return []
+    
+    def get_dns_records(self, zone: str, record_type: str = "A") -> list[dict[str, Any]]:
+        """Get DNS records for a specific zone."""
+        if not self._connection:
+            raise ADServiceError("Not connected to LDAP")
+        
+        dns_base = f"dc={zone},cn=MicrosoftDNS,cn=System,{self._base_dn}"
+        
+        try:
+            self._connection.search(
+                search_base=dns_base,
+                search_filter="(objectClass=dNSZone)",
+                search_scope=SUBTREE,
+                attributes=["name", "dNSDomainName", "dnsRecord"],
+                size_limit=100,
+            )
+            
+            records = []
+            for entry in self._connection.entries:
+                records.append({
+                    "name": str(entry.name),
+                    "zone": zone,
+                    "type": record_type,
+                })
+            
+            return records
+        except Exception as exc:
+            logger.warning(f"DNS record search failed: {exc}")
+            return []
+    
+    def get_dhcp_servers(self) -> list[dict[str, Any]]:
+        """Get DHCP servers from AD."""
+        if not self._connection:
+            raise ADServiceError("Not connected to LDAP")
+        
+        dhcp_base = f"cn=DHCP,{self._base_dn}"
+        
+        try:
+            self._connection.search(
+                search_base=dhcp_base,
+                search_filter="(objectClass=dhcpServer)",
+                search_scope=SUBTREE,
+                attributes=["cn", "distinguishedName"],
+                size_limit=20,
+            )
+            
+            servers = []
+            for entry in self._connection.entries:
+                servers.append({
+                    "name": str(entry.cn),
+                    "distinguishedName": str(entry.distinguishedName),
+                })
+            
+            return servers
+        except Exception as exc:
+            logger.warning(f"DHCP server search failed: {exc}")
+            return []
 
 
 def create_from_settings(
