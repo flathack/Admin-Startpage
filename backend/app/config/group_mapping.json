@@ -1,5 +1,5 @@
 {
-  "version": 1,
+  "version": 2,
   "default_role": "viewer",
   "group_role_mapping": {
     "Startpage-Users": [
@@ -16,6 +16,9 @@
     ],
     "Startpage-Super-Admins": [
       "admin"
+    ],
+    "Startpage-AD-Admins": [
+      "ad_admin"
     ]
   }
 }

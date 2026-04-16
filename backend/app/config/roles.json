@@ -1,11 +1,14 @@
 {
-  "version": 1,
+  "version": 2,
   "roles": {
     "viewer": {
       "description": "Nur lesen und persoenliches Dashboard nutzen.",
       "permissions": [
         "startpage.dashboard.view",
-        "ad.view"
+        "ad.view",
+        "ad.users.read",
+        "ad.computers.read",
+        "ad.groups.read"
       ]
     },
     "dashboard_editor": {
@@ -13,7 +16,10 @@
       "permissions": [
         "startpage.dashboard.view",
         "startpage.dashboard.edit",
-        "ad.view"
+        "ad.view",
+        "ad.users.read",
+        "ad.computers.read",
+        "ad.groups.read"
       ]
     },
     "platform_admin": {
@@ -22,21 +28,51 @@
         "startpage.dashboard.view",
         "startpage.dashboard.edit",
         "ad.view",
+        "ad.users.read",
+        "ad.computers.read",
+        "ad.groups.read",
+        "ad.users.write",
+        "ad.computers.write",
         "nutanix.view",
+        "nutanix.vm.create",
+        "nutanix.vm.delete",
         "endpoint.view",
         "vsphere.view",
+        "vsphere.vm.manage",
         "rollout.view",
         "rollout.create",
-        "rollout.manage"
+        "rollout.manage",
+        "rollout.start",
+        "rollout.stop",
+        "rollout.delete"
       ]
     },
     "citrix_admin": {
-      "description": "Citrix On-Prem lesen und spaeter verwalten.",
+      "description": "Citrix On-Prem lesen und verwalten.",
       "permissions": [
         "startpage.dashboard.view",
         "citrix.view",
+        "citrix.machines.read",
+        "citrix.delivery_groups.read",
         "citrix.assign_user",
-        "citrix.maintenance"
+        "citrix.maintenance",
+        "citrix.maintenance.enable",
+        "citrix.maintenance.disable",
+        "citrix.sessions.read",
+        "citrix.sessions.disconnect"
+      ]
+    },
+    "ad_admin": {
+      "description": "Active Directory Verwaltung.",
+      "permissions": [
+        "startpage.dashboard.view",
+        "ad.view",
+        "ad.users.*",
+        "ad.computers.*",
+        "ad.groups.*",
+        "ad.ous.read",
+        "ad.dns.read",
+        "ad.dhcp.read"
       ]
     },
     "admin": {

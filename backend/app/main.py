@@ -25,6 +25,7 @@ logging.basicConfig(
 logger = logging.getLogger("admin-startpage")
 
 from app.services.ad_service import ADService, ADServiceError, create_from_settings
+from app.services.audit_service import AuditService, create_audit_service
 from app.services.auth_service import ADAuthService, ADIdentity, AuthenticationError
 from app.services.connector_client import ConnectorClient
 from app.services.dashboard_store import DashboardStore
@@ -73,6 +74,10 @@ DATA_DIR = PROJECT_DIR / "data" / "users"
 
 settings = AppSettings.from_environment()
 started_at = datetime.now(timezone.utc)
+
+# Audit logging
+audit_service = create_audit_service()
+
 ROLLOUT_TASKS_DIR = Path(settings.rollout_tasks_dir) if settings.rollout_tasks_dir else PROJECT_DIR / "data" / "rollout-jobs"
 ROLLOUT_NAME_MAP_DIR = Path(settings.rollout_name_map_dir) if settings.rollout_name_map_dir else None
 ROLLOUT_CONTROL_DIR = Path(settings.rollout_control_dir) if settings.rollout_control_dir else None
@@ -212,6 +217,7 @@ def login(payload: LoginRequest) -> dict[str, Any]:
         identity = auth_service.authenticate(payload.username, payload.password)
     except AuthenticationError as exc:
         logger.warning(f"Login failed for {payload.username}: {exc}")
+        audit_service.log_login(payload.username, success=False)
         raise HTTPException(status_code=401, detail=str(exc)) from exc
 
     user_session = permission_service.build_session(identity)
@@ -236,6 +242,9 @@ def login(payload: LoginRequest) -> dict[str, Any]:
         },
     )
     logger.info(f"User {payload.username} logged in successfully, session: {token[:8]}...")
+    
+    # Audit logging
+    audit_service.log_login(user_session.identity.username, success=True)
 
     return {
         "sessionToken": token,
@@ -247,13 +256,30 @@ def login(payload: LoginRequest) -> dict[str, Any]:
 
 @app.post("/api/auth/logout")
 def logout(x_session_token: str | None = Header(default=None)) -> dict[str, bool]:
+    username = "unknown"
     if x_session_token:
         stored = sessions.get(x_session_token)
         if stored:
             username = stored.session.get("identity", {}).get("username", "unknown")
             logger.info(f"User {username} logging out, session: {x_session_token[:8]}...")
+            audit_service.log_logout(username)
     _delete_session(x_session_token)
     return {"loggedOut": True}
+
+
+@app.post("/api/auth/refresh")
+def refresh_session(x_session_token: str | None = Header(default=None)) -> dict[str, Any]:
+    """Refresh session TTL for active sessions."""
+    stored_session = _get_session(x_session_token)
+    # Extend session
+    stored_session.expires_at = datetime.now(timezone.utc) + timedelta(minutes=session_ttl)
+    username = stored_session.session.get("identity", {}).get("username", "unknown")
+    logger.info(f"Session refreshed for user {username}")
+    return {
+        "refreshed": True,
+        "expiresAt": stored_session.expires_at.isoformat(),
+        "expiresInSeconds": session_ttl * 60,
+    }
 
 
 @app.get("/api/me")

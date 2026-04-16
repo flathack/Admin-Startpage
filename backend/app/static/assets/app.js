@@ -125,6 +125,32 @@ function resetClientState() {
   elements.loginView.classList.remove("hidden");
 }
 
+// Session refresh timer - refresh every 5 minutes
+let sessionRefreshInterval = null;
+
+function startSessionRefresh() {
+  if (sessionRefreshInterval) {
+    clearInterval(sessionRefreshInterval);
+  }
+  sessionRefreshInterval = setInterval(async () => {
+    if (!state.token) return;
+    try {
+      const result = await request("/api/auth/refresh", { method: "POST" });
+      state.sessionExpiresAt = result.expiresAt;
+      console.log("Session refreshed, new expiry:", result.expiresAt);
+    } catch (err) {
+      console.warn("Session refresh failed:", err.message);
+    }
+  }, 5 * 60 * 1000); // 5 minutes
+}
+
+function stopSessionRefresh() {
+  if (sessionRefreshInterval) {
+    clearInterval(sessionRefreshInterval);
+    sessionRefreshInterval = null;
+  }
+}
+
 function setMessage(message, type = "") {
   elements.loginMessage.textContent = message;
   elements.loginMessage.className = `message ${type}`.trim();
@@ -605,6 +631,8 @@ function renderApp() {
   elements.welcomeMeta.textContent = `Angemeldet als ${state.user.username}`;
   renderSidebar();
   renderCurrentView();
+  // Start session refresh timer
+  startSessionRefresh();
 }
 
 async function loadIntegrations(selectDefault = false) {
@@ -718,6 +746,7 @@ elements.logoutButton.addEventListener("click", async () => {
   } catch (_error) {
     // Client-State trotzdem lokal zuruecksetzen.
   }
+  stopSessionRefresh();
   resetClientState();
   window.location.reload();
 });
