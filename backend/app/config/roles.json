@@ -1,0 +1,53 @@
+{
+  "version": 1,
+  "roles": {
+    "viewer": {
+      "description": "Nur lesen und persoenliches Dashboard nutzen.",
+      "permissions": [
+        "startpage.dashboard.view",
+        "ad.view"
+      ]
+    },
+    "dashboard_editor": {
+      "description": "Darf persoenliche Startseiten pflegen.",
+      "permissions": [
+        "startpage.dashboard.view",
+        "startpage.dashboard.edit",
+        "ad.view"
+      ]
+    },
+    "platform_admin": {
+      "description": "Plattformzugriff auf Nutanix, Endpoint und vSphere.",
+      "permissions": [
+        "startpage.dashboard.view",
+        "startpage.dashboard.edit",
+        "ad.view",
+        "nutanix.view",
+        "endpoint.view",
+        "vsphere.view",
+        "rollout.view"
+      ]
+    },
+    "citrix_admin": {
+      "description": "Citrix On-Prem lesen und spaeter verwalten.",
+      "permissions": [
+        "startpage.dashboard.view",
+        "citrix.view",
+        "citrix.assign_user",
+        "citrix.maintenance"
+      ]
+    },
+    "admin": {
+      "description": "Vollzugriff auf alle Module der Startpage.",
+      "permissions": [
+        "startpage.*",
+        "ad.*",
+        "nutanix.*",
+        "endpoint.*",
+        "vsphere.*",
+        "citrix.*",
+        "rollout.*"
+      ]
+    }
+  }
+}

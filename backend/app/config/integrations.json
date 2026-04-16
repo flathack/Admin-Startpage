@@ -1,0 +1,81 @@
+{
+  "systems": [
+    {
+      "id": "ad",
+      "title": "Active Directory",
+      "permission": "ad.view",
+      "mock": false,
+      "mock_status": "ok",
+      "mock_message": "AD-Kontext aus dem Login verfuegbar.",
+      "mock_items": [
+        {"label": "Gruppen", "value": "4"},
+        {"label": "Login-Typ", "value": "LDAP"}
+      ]
+    },
+    {
+      "id": "nutanix",
+      "title": "Nutanix",
+      "permission": "nutanix.view",
+      "base_url": "https://nutanix.local:9440",
+      "verify_tls": false,
+      "mock": true,
+      "mock_status": "ok",
+      "mock_message": "Mock-Daten fuer Nutanix aktiv.",
+      "mock_meta": {"clusters": 3, "sampleVmCount": 5},
+      "mock_items": [
+        {"label": "TKG-CLU-01", "value": "6 Hosts"},
+        {"label": "W11-CLIENT-104", "value": "on"},
+        {"label": "SRV-APP-22-03", "value": "off"}
+      ]
+    },
+    {
+      "id": "endpoint",
+      "title": "Endpoint Central",
+      "permission": "endpoint.view",
+      "base_url": "https://endpoint.local",
+      "inventory_path": "/api/1.4/desktop/computers",
+      "auth_mode": "session_basic",
+      "verify_tls": false,
+      "mock": true,
+      "mock_status": "ok",
+      "mock_message": "Mock-Daten fuer Endpoint Central aktiv.",
+      "mock_meta": {"inventoryCount": 186},
+      "mock_items": [
+        {"label": "W11-TKG-033", "value": "agent-ok"},
+        {"label": "SRV-TKG-010", "value": "patch-pending"},
+        {"label": "NB-TKG-271", "value": "agent-warning"}
+      ]
+    },
+    {
+      "id": "vsphere",
+      "title": "vSphere",
+      "permission": "vsphere.view",
+      "base_url": "https://vcenter.local",
+      "verify_tls": false,
+      "mock": true,
+      "mock_status": "ok",
+      "mock_message": "Mock-Daten fuer vSphere aktiv.",
+      "mock_meta": {"vmCount": 124},
+      "mock_items": [
+        {"label": "DC-TKG-01", "value": "POWERED_ON"},
+        {"label": "APP-TKG-07", "value": "POWERED_OFF"},
+        {"label": "SQL-TKG-02", "value": "POWERED_ON"}
+      ]
+    },
+    {
+      "id": "citrix",
+      "title": "Citrix On-Prem",
+      "permission": "citrix.view",
+      "admin_address": "ddc01.local",
+      "mock": true,
+      "mock_status": "planned",
+      "mock_message": "Citrix wird zunaechst ueber Mock-Daten dargestellt, spaeter ueber Windows Connector.",
+      "mock_meta": {"connectorRequired": true},
+      "mock_items": [
+        {"label": "CTX-W11-001", "value": "maintenance=false"},
+        {"label": "CTX-W11-017", "value": "assigned=leer"},
+        {"label": "Connector", "value": "ausstehend"}
+      ]
+    }
+  ]
+}

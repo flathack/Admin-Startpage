@@ -1,0 +1,87 @@
+<!doctype html>
+<html lang="de">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Admin Startpage</title>
+    <link rel="stylesheet" href="/assets/app.css">
+  </head>
+  <body>
+    <div class="shell">
+      <section id="loginView" class="login-layout">
+        <div class="login-copy">
+          <p class="eyebrow">Local Browser Startpage</p>
+          <h1>Admin Portal im Operations-Layout.</h1>
+          <p class="lede">
+            Uebersichtliche Navigation, klare Inhaltsflaeche und ein AD-Tree in der Sidebar statt verteilter Kacheln.
+          </p>
+          <div id="healthBadges" class="badge-row"></div>
+        </div>
+
+        <form id="loginForm" class="login-card">
+          <h2>Anmeldung</h2>
+          <label>
+            <span>Benutzername</span>
+            <input id="usernameInput" name="username" autocomplete="username" placeholder="domain\\user oder user@domain">
+          </label>
+          <label>
+            <span>Passwort</span>
+            <input id="passwordInput" name="password" type="password" autocomplete="current-password" placeholder="Passwort eingeben">
+          </label>
+          <button type="submit">Anmelden</button>
+          <p class="hint">Aktuell sind Mock-Auth und Mock-Integrationen standardmaessig aktiv.</p>
+          <p id="loginMessage" class="message"></p>
+        </form>
+      </section>
+
+      <main id="appView" class="app-shell hidden">
+        <aside class="sidebar">
+          <div class="sidebar-brand">
+            <div class="brand-mark">A</div>
+            <div>
+              <strong>Admin Portal</strong>
+              <p id="sidebarUserLabel">Nicht angemeldet</p>
+            </div>
+          </div>
+
+          <div class="sidebar-section">
+            <p class="sidebar-caption">Modules</p>
+            <nav id="sidebarNav" class="sidebar-nav"></nav>
+          </div>
+
+          <div class="sidebar-section sidebar-footer">
+            <p class="sidebar-caption">Connector</p>
+            <div id="connectorStatusBox" class="connector-box"></div>
+          </div>
+        </aside>
+
+        <section class="workspace">
+          <header class="workspace-header">
+            <div>
+              <p id="welcomeMeta" class="eyebrow">Angemeldet</p>
+              <h2 id="welcomeTitle">Dashboard</h2>
+              <p id="workspaceSubtitle" class="workspace-subtitle">Fokussierte Arbeitsflaeche fuer das aktive Modul.</p>
+            </div>
+
+            <div class="workspace-actions">
+              <input id="searchInput" type="search" placeholder="Im aktiven Bereich filtern">
+              <button id="refreshIntegrationsButton" type="button" class="secondary">Neu laden</button>
+              <button id="logoutButton" type="button" class="secondary">Abmelden</button>
+            </div>
+          </header>
+
+          <section class="workspace-grid">
+            <article class="surface main-surface">
+              <div id="contentPrimary" class="content-stack"></div>
+            </article>
+
+            <article class="surface side-surface">
+              <div id="contentSecondary" class="content-stack"></div>
+            </article>
+          </section>
+        </section>
+      </main>
+    </div>
+    <script src="/assets/app.js" defer></script>
+  </body>
+</html>

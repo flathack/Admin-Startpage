@@ -1,0 +1,21 @@
+{
+  "version": 1,
+  "default_role": "viewer",
+  "group_role_mapping": {
+    "Startpage-Users": [
+      "viewer"
+    ],
+    "Startpage-Dashboard-Editors": [
+      "dashboard_editor"
+    ],
+    "Startpage-Platform-Admins": [
+      "platform_admin"
+    ],
+    "Startpage-Citrix-Admins": [
+      "citrix_admin"
+    ],
+    "Startpage-Super-Admins": [
+      "admin"
+    ]
+  }
+}

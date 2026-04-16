@@ -1,0 +1,32 @@
+services:
+  startpage-web:
+    build:
+      context: ./backend
+    container_name: startpage-web
+    ports:
+      - "8080:8080"
+    environment:
+      STARTPAGE_ENABLE_MOCK_AUTH: "true"
+      STARTPAGE_ENABLE_MOCK_INTEGRATIONS: "true"
+      STARTPAGE_CONNECTOR_ENABLED: "false"
+      STARTPAGE_CONNECTOR_URL: "http://startpage-connector:8090"
+      STARTPAGE_LDAP_SERVER: "ldaps://dc.de.toyota-fs.com"
+      STARTPAGE_LDAP_BASE_DN: "DC=de,DC=toyota-fs,DC=com"
+      STARTPAGE_LDAP_DOMAIN_SUFFIX: "de.toyota-fs.com"
+      STARTPAGE_SESSION_TTL_MINUTES: "480"
+    volumes:
+      - ./data:/app/data
+    restart: unless-stopped
+
+  startpage-connector:
+    build:
+      context: ./connector
+    container_name: startpage-connector
+    profiles:
+      - connector
+    ports:
+      - "8090:8090"
+    environment:
+      STARTPAGE_CONNECTOR_MOCK: "true"
+      STARTPAGE_CITRIX_ADMIN_ADDRESS: "ddc01.local"
+    restart: unless-stopped

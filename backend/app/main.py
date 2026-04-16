@@ -1,0 +1,233 @@
+from __future__ import annotations
+
+import os
+import secrets
+from datetime import datetime, timedelta, timezone
+from pathlib import Path
+from typing import Any
+
+from fastapi import FastAPI, Header, HTTPException
+from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import FileResponse
+from fastapi.staticfiles import StaticFiles
+from pydantic import BaseModel, Field
+
+from app.services.auth_service import ADAuthService, ADIdentity, AuthenticationError
+from app.services.connector_client import ConnectorClient
+from app.services.dashboard_store import DashboardStore
+from app.services.integration_service import IntegrationService
+from app.services.permission_service import PermissionService, UserSession
+
+
+class LoginRequest(BaseModel):
+    username: str = Field(min_length=1)
+    password: str = Field(min_length=1)
+
+
+class DashboardPayload(BaseModel):
+    headline: str = "Meine Admin Startseite"
+    widgets: list[dict[str, Any]] = Field(default_factory=list)
+
+
+class StoredSession(BaseModel):
+    token: str
+    expires_at: datetime
+    session: dict[str, Any]
+
+
+APP_DIR = Path(__file__).resolve().parent
+PROJECT_DIR = APP_DIR.parents[1]
+STATIC_DIR = APP_DIR / "static"
+CONFIG_DIR = APP_DIR / "config"
+DATA_DIR = PROJECT_DIR / "data" / "users"
+
+auth_service = ADAuthService.from_environment()
+permission_service = PermissionService(CONFIG_DIR)
+dashboard_store = DashboardStore(DATA_DIR)
+connector_client = ConnectorClient()
+integration_service = IntegrationService(CONFIG_DIR / "integrations.json", permission_service, connector_client)
+session_ttl = int(os.getenv("STARTPAGE_SESSION_TTL_MINUTES", "480"))
+sessions: dict[str, StoredSession] = {}
+
+app = FastAPI(title="Admin Startpage", version="0.1.0")
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+app.mount("/assets", StaticFiles(directory=STATIC_DIR / "assets"), name="assets")
+
+
+def _prune_expired_sessions() -> None:
+    now = datetime.now(timezone.utc)
+    expired = [token for token, payload in sessions.items() if payload.expires_at <= now]
+    for token in expired:
+        sessions.pop(token, None)
+
+
+def _get_session(session_token: str | None) -> StoredSession:
+    _prune_expired_sessions()
+    if not session_token:
+        raise HTTPException(status_code=401, detail="Session-Token fehlt.")
+    payload = sessions.get(session_token)
+    if payload is None:
+        raise HTTPException(status_code=401, detail="Session ungueltig oder abgelaufen.")
+    return payload
+
+
+def _session_response(user_session: UserSession) -> dict[str, Any]:
+    return {
+        "username": user_session.identity.username,
+        "displayName": user_session.identity.display_name,
+        "email": user_session.identity.email,
+        "distinguishedName": user_session.identity.distinguished_name,
+        "adGroups": sorted(user_session.identity.ad_groups),
+        "roles": sorted(user_session.roles),
+        "permissions": sorted(user_session.permissions),
+        "modules": permission_service.visible_modules(user_session.permissions),
+    }
+
+
+def _build_user_session(stored_session: StoredSession) -> UserSession:
+    identity_data = stored_session.session["identity"]
+    identity = ADIdentity(
+        username=str(identity_data["username"]),
+        distinguished_name=str(identity_data["distinguished_name"]),
+        display_name=str(identity_data["display_name"]),
+        email=str(identity_data["email"]),
+        ad_groups=frozenset(identity_data.get("ad_groups", [])),
+    )
+    return UserSession(
+        identity=identity,
+        roles=frozenset(stored_session.session["roles"]),
+        permissions=frozenset(stored_session.session["permissions"]),
+        session_id=stored_session.session["session_id"],
+        login_time=datetime.fromisoformat(stored_session.session["login_time"]),
+    )
+
+
+def _require_permission(user_session: UserSession, permission: str) -> None:
+    if not permission_service.has_permission(user_session.permissions, permission):
+        raise HTTPException(status_code=403, detail=f"Berechtigung fehlt: {permission}")
+
+
+@app.get("/api/health")
+def health() -> dict[str, Any]:
+    connector_status = connector_client.status()
+    return {
+        "status": "ok",
+        "mockAuth": os.getenv("STARTPAGE_ENABLE_MOCK_AUTH", "true").lower() == "true",
+        "mockIntegrations": os.getenv("STARTPAGE_ENABLE_MOCK_INTEGRATIONS", "true").lower() == "true",
+        "timestamp": datetime.now(timezone.utc).isoformat(),
+        "connectorMode": "windows-connector-required-for-rsat-and-citrix-automation",
+        "connector": connector_status,
+    }
+
+
+@app.post("/api/auth/login")
+def login(payload: LoginRequest) -> dict[str, Any]:
+    try:
+        identity = auth_service.authenticate(payload.username, payload.password)
+    except AuthenticationError as exc:
+        raise HTTPException(status_code=401, detail=str(exc)) from exc
+
+    user_session = permission_service.build_session(identity)
+    token = secrets.token_urlsafe(32)
+    expires_at = datetime.now(timezone.utc) + timedelta(minutes=session_ttl)
+    sessions[token] = StoredSession(
+        token=token,
+        expires_at=expires_at,
+        session={
+            "identity": {
+                "username": user_session.identity.username,
+                "distinguished_name": user_session.identity.distinguished_name,
+                "display_name": user_session.identity.display_name,
+                "email": user_session.identity.email,
+                "ad_groups": sorted(user_session.identity.ad_groups),
+            },
+            "roles": list(user_session.roles),
+            "permissions": list(user_session.permissions),
+            "session_id": user_session.session_id,
+            "login_time": user_session.login_time.isoformat(),
+            "auth_password": payload.password,
+        },
+    )
+
+    return {
+        "sessionToken": token,
+        "expiresAt": expires_at.isoformat(),
+        "user": _session_response(user_session),
+        "dashboard": dashboard_store.load(user_session.identity.username),
+    }
+
+
+@app.get("/api/me")
+def current_user(x_session_token: str | None = Header(default=None)) -> dict[str, Any]:
+    stored_session = _get_session(x_session_token)
+    user_session = _build_user_session(stored_session)
+    dashboard = dashboard_store.load(user_session.identity.username)
+    return {
+        "user": _session_response(user_session),
+        "dashboard": dashboard,
+        "expiresAt": stored_session.expires_at.isoformat(),
+    }
+
+
+@app.put("/api/me/dashboard")
+def update_dashboard(
+    payload: DashboardPayload,
+    x_session_token: str | None = Header(default=None),
+) -> dict[str, Any]:
+    stored_session = _get_session(x_session_token)
+    username = str(stored_session.session["identity"]["username"])
+    dashboard_store.save(username, payload.model_dump())
+    return {"saved": True, "dashboard": dashboard_store.load(username)}
+
+
+@app.get("/api/integrations/overview")
+def integrations_overview(x_session_token: str | None = Header(default=None)) -> dict[str, Any]:
+    stored_session = _get_session(x_session_token)
+    user_session = _build_user_session(stored_session)
+    items = integration_service.overview(
+        user_session,
+        session_password=str(stored_session.session.get("auth_password", "")),
+    )
+    return {"systems": items}
+
+
+@app.get("/api/integrations/{system_id}")
+def integration_detail(system_id: str, x_session_token: str | None = Header(default=None)) -> dict[str, Any]:
+    stored_session = _get_session(x_session_token)
+    user_session = _build_user_session(stored_session)
+    permission_map = {
+        "ad": "ad.view",
+        "nutanix": "nutanix.view",
+        "endpoint": "endpoint.view",
+        "vsphere": "vsphere.view",
+        "citrix": "citrix.view",
+    }
+    required_permission = permission_map.get(system_id)
+    if required_permission:
+        _require_permission(user_session, required_permission)
+    try:
+        system = integration_service.details(
+            system_id,
+            user_session,
+            session_password=str(stored_session.session.get("auth_password", "")),
+        )
+    except KeyError as exc:
+        raise HTTPException(status_code=404, detail=f"Unbekanntes System: {system_id}") from exc
+    except PermissionError as exc:
+        raise HTTPException(status_code=403, detail=str(exc)) from exc
+    return system
+
+
+@app.get("/api/connector/status")
+def connector_status() -> dict[str, Any]:
+    return connector_client.status()
+
+
+@app.get("/")
+def root() -> FileResponse:
+    return FileResponse(STATIC_DIR / "index.html")
