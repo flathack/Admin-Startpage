@@ -2,7 +2,7 @@
 
 ## Ziel des Dokuments
 
-Dieses Dokument beschreibt die vollstaendige Umsetzungsplanung fuer die Admin Startpage als browserbasierte Web-Anwendung mit Docker-Backend, rollenbasierter Steuerung und schrittweiser Uebernahme der bestehenden Fachlogik aus Rollout-Monitor.
+Dieses Dokument beschreibt die vollstaendige Umsetzungsplanung fuer die Admin Startpage als browserbasierte Web-Anwendung mit Docker-Backend, rollenbasierter Steuerung und vollstaendiger Uebernahme der benoetigten Fachlogik aus Rollout-Monitor und den angeschlossenen Zielsystemen.
 
 Der Plan dient gleichzeitig als:
 
@@ -20,7 +20,20 @@ Ziel ist nicht nur eine Navigationsseite, sondern eine fachlich nutzbare Plattfo
 - rollen- und gruppenbasierter Rechtevergabe
 - benutzerspezifischer Startseite
 - klar getrennten Integrationsschichten
-- schrittweiser Ablösung relevanter Funktionen aus Rollout-Monitor
+- vollstaendiger Ablösung der relevanten Funktionen aus Rollout-Monitor in der Web-App
+
+## Verbindlicher Endzustand
+
+Nach Abschluss aller Phasen dieses Plans gilt die Web-App als vollstaendig fertig. Das bedeutet konkret:
+
+- alle vorgesehenen Hauptmodule sind fachlich nutzbar, nicht nur sichtbar
+- alle benoetigten Live-Integrationen arbeiten ohne Mock-Modus
+- alle kritischen Betriebsprozesse koennen vollständig in der Web-App ausgefuehrt werden
+- alle schreibenden und destruktiven Aktionen sind serverseitig abgesichert und auditierbar
+- der Windows-Connector liefert die benoetigten AD- und Citrix-On-Prem-Funktionen produktiv
+- die Anwendung ist fuer den internen Dauerbetrieb dokumentiert, testbar und deploybar
+
+Nicht Ziel dieses Plans ist ein weiterer Zwischenstand oder ein erweiterter Prototyp. Ziel ist die fachlich abgeschlossene Web-Anwendung.
 
 ## Ist-Stand
 
@@ -50,6 +63,12 @@ Noch nicht vollstaendig umgesetzt:
 - echte Citrix-On-Prem-Aktionen ueber den Windows-Connector
 - vollstaendige Endpoint-/Zenworks-nahe Betriebsfunktionen
 - Audit-, Logging- und Betriebsdiagnostik auf Produktionsniveau
+
+Restziel bis Planende:
+
+- saemtliche oben genannten Luecken muessen geschlossen sein
+- Mock-Komponenten duerfen im Zielbetrieb keine fachliche Kernfunktion mehr blockieren
+- die Web-App muss alle benoetigten Tagesgeschaefte ohne Rueckgriff auf Rollout-Monitor abdecken
 
 ## Zielarchitektur
 
@@ -120,12 +139,14 @@ Ergebnis:
 
 - stabiler technischer Unterbau fuer weitere Migration
 - klar erkennbare Betriebs- und Konfigurationsfehler
+- belastbare Basis fuer den vollstaendigen Live-Betrieb aller Module
 
 Abnahme:
 
 - Health-Endpoint meldet alle kritischen Fehlkonfigurationen sauber
 - Login, Logout und Session-Ablauf sind nachvollziehbar testbar
 - Mock- und Live-Modus sind eindeutig trennbar
+- produktive Grundkonfiguration kann ohne manuelle Codeanpassungen betrieben werden
 
 ### Phase 2: Rollout-Live-Ausfuehrung auf Nutanix portieren
 
@@ -143,6 +164,7 @@ Umfang:
 Ergebnis:
 
 - Rollout-Jobs koennen nicht nur gestartet, sondern real auf Nutanix angestossen werden
+- der Rollout-Start ist nicht mehr von Mock-Schritten abhaengig
 
 Abhaengigkeiten:
 
@@ -152,7 +174,7 @@ Abhaengigkeiten:
 
 Abnahme:
 
-- ein echter Rollout-Start fuehrt mindestens bis zur VM-Bereitstellung und Boot-Phase
+- ein echter Rollout-Start fuehrt vollstaendig durch die Nutanix-seitige Bereitstellung bis zur Uebergabe an den weiteren Rollout-Prozess
 - Fehlerfaelle werden im Jobstatus und API-Response nachvollziehbar sichtbar
 
 ### Phase 3: Continue-, Resume- und ACK-Workflow vervollstaendigen
@@ -171,11 +193,13 @@ Umfang:
 Ergebnis:
 
 - Web-App steuert nicht nur den Start, sondern auch die Fortsetzung laufender Rollouts kontrolliert
+- Unterbrechungen koennen vollstaendig innerhalb der Web-App behandelt werden
 
 Abnahme:
 
 - Jobs koennen nach Unterbrechung gezielt fortgesetzt werden
 - Statuswechsel zwischen Registrierung, Zuweisung, Ausfuehrung und Abschluss sind plausibel
+- der vollstaendige Continue-/Resume-Pfad ist fachlich ohne Desktop-App nutzbar
 
 ### Phase 4: Delete- und ReRollout-Workflow portieren
 
@@ -193,11 +217,13 @@ Umfang:
 Ergebnis:
 
 - zentrale Lifecycle-Aktionen fuer Rollout-Jobs stehen im Web zur Verfuegung
+- Rollout-Lifecycle ist vollstaendig ueber die Web-App steuerbar
 
 Abnahme:
 
 - Delete und ReRollout sind nur mit passenden Rechten ausfuehrbar
 - jede Aktion hinterlaesst nachvollziehbare Status- und Logdaten
+- fuer den Rollout-Lifecycle ist kein Rueckgriff auf Rollout-Monitor mehr erforderlich
 
 ### Phase 5: ActiveDirectory fachlich ausbauen
 
@@ -206,15 +232,15 @@ Das AD-Modul von einer Struktur-/Navigationsbasis zu einem nutzbaren Admin-Modul
 
 Umfang:
 
-- AD Users & Computers mit ersten lesenden Such- und Detailfunktionen erweitern
-- Auswertungen als erste Reports integrieren
-- DNS-Funktionen als lesende und spaeter schreibende Fachbausteine vorbereiten
-- DHCP-Funktionen analog strukturieren
+- AD Users & Computers mit Such-, Detail- und benoetigten Verwaltungsfunktionen erweitern
+- Auswertungen als benoetigte Reports und administrative Sichten integrieren
+- DNS-Funktionen fachlich nutzbar fuer Lesen und definierte Schreiboperationen umsetzen
+- DHCP-Funktionen fachlich nutzbar fuer Lesen und definierte Schreiboperationen umsetzen
 - Connector-Schnittstellen fuer PowerShell-/RSAT-Aufrufe normieren
 
 Ergebnis:
 
-- das AD-Modul wird von einer Platzhalterstruktur zu einem echten Betriebsmodul
+- das AD-Modul ist vollstaendig als Web-Modul nutzbar
 
 Abhaengigkeiten:
 
@@ -223,7 +249,8 @@ Abhaengigkeiten:
 
 Abnahme:
 
-- mindestens erste produktiv nutzbare lesende AD-Teilfunktionen sind aus der Web-App aufrufbar
+- die benoetigten AD-, DNS- und DHCP-Funktionen sind aus der Web-App produktiv nutzbar
+- zentrale AD-Tagesgeschaefte koennen ohne parallele Desktop-App bearbeitet werden
 
 ### Phase 6: Citrix-On-Prem ueber Connector vervollstaendigen
 
@@ -240,11 +267,13 @@ Umfang:
 Ergebnis:
 
 - Citrix wird als operatives Modul im Web nutzbar
+- Citrix-On-Prem ist fuer die benoetigten Betriebsaktionen vollstaendig ueber den Connector angebunden
 
 Abnahme:
 
 - definierte Citrix-Live-Daten werden ueber den Connector korrekt geliefert
-- erste fachliche Aktionen sind aus der Web-App heraus ausfuehrbar
+- die benoetigten Citrix-Aktionen sind aus der Web-App heraus live ausfuehrbar
+- fuer die vorgesehenen Citrix-Prozesse ist kein Mock-Connector mehr erforderlich
 
 ### Phase 7: Endpoint Central, vSphere und weitere Betriebsfunktionen schliessen
 
@@ -261,10 +290,11 @@ Umfang:
 Ergebnis:
 
 - die Startpage deckt die wesentlichen taeglichen Plattformfunktionen konsistent ab
+- alle vorgesehenen Plattformmodule sind fachlich abgeschlossen
 
 Abnahme:
 
-- pro Zielsystem gibt es mindestens einen fachlich relevanten, im Alltag nutzbaren End-to-End-Anwendungsfall
+- pro Zielsystem sind alle benoetigten End-to-End-Anwendungsfaelle der Web-App umgesetzt und validiert
 
 ### Phase 8: Betriebsreife, Audit und Deployment finalisieren
 
@@ -283,10 +313,13 @@ Umfang:
 Ergebnis:
 
 - administrativ betreibbare Web-Anwendung mit nachvollziehbarer Betriebsbasis
+- fachlich abgeschlossene und produktionsreife Web-Anwendung
 
 Abnahme:
 
 - definierte Kernablaeufe sind dokumentiert, testbar und deploybar
+- der geplante Funktionsumfang ist vollstaendig umgesetzt und abgenommen
+- fuer den Zielprozess ist keine Rueckfallnutzung des Altwerkzeugs mehr notwendig
 
 ## Arbeitspakete im Detail
 
@@ -302,6 +335,7 @@ Offene Aufgaben:
 Ergebnis:
 
 - tragfaehiges Sicherheitsmodell fuer produktive Nutzung
+- endgueltiges Berechtigungsmodell fuer die fertige Web-App
 
 ### Arbeitspaket B: Rollout-Kernprozess
 
@@ -315,6 +349,7 @@ Offene Aufgaben:
 Ergebnis:
 
 - Rollout wird zum zentral nutzbaren Web-Modul statt nur zum Statusmonitor
+- vollstaendige Rollout-Steuerung im Web ohne Funktionsluecke zum Altwerkzeug
 
 ### Arbeitspaket C: Connector-Strategie
 
@@ -328,6 +363,7 @@ Offene Aufgaben:
 Ergebnis:
 
 - klare Trennung zwischen Linux-/Containerlogik und Windows-naher Speziallogik
+- produktiv nutzbarer Connector fuer alle benoetigten Windows-nahen Funktionen
 
 ### Arbeitspaket D: Frontend-Produktivisierung
 
@@ -341,6 +377,7 @@ Offene Aufgaben:
 Ergebnis:
 
 - betriebstaugliche Oberflaeche statt rein technischer Demo
+- vollstaendig nutzbare Admin-Oberflaeche fuer alle Zielmodule
 
 ### Arbeitspaket E: Monitoring, Logging und Audit
 
@@ -354,6 +391,7 @@ Offene Aufgaben:
 Ergebnis:
 
 - bessere Nachvollziehbarkeit und geringerer Analyseaufwand im Betrieb
+- revisionsfaehige Betriebs- und Aktionsnachverfolgung
 
 ## Priorisierung
 
@@ -384,7 +422,7 @@ Technische Abhaengigkeiten:
 
 Fachliche Abhaengigkeiten:
 
-- klare Definition, welche Rollout-Monitor-Funktionen wirklich migriert werden sollen
+- klare Definition, welche Rollout-Monitor-Funktionen verbindlich migriert werden muessen
 - verbindliche Rollen- und Rechtezuordnung pro Modul und Aktion
 - abgestimmte Regeln fuer Delete-, ReRollout- und Freigabeprozesse
 
@@ -415,10 +453,24 @@ Testebenen:
 Pflichtfaelle fuer die naechsten Schritte:
 
 - Login und Rollenaufloesung
-- Rollout-Start im Mock- und spaeter Live-Modus
+- Rollout-Start und vollstaendige Ausfuehrung im Live-Modus
 - Runtime-Sync einschliesslich ACK/Registrierung
 - ASSIGN/RESUME/Delete/ReRollout-Aktionen mit Rechtepruefung
 - Connector-Ausfall und Fehlerreaktion
+- AD-, DNS-, DHCP-, Citrix-, Endpoint- und vSphere-Kernprozesse im Live-Betrieb
+
+## Abnahmekriterien fuer die fertige Web-App
+
+Die Web-App ist erst dann insgesamt fertig, wenn alle folgenden Punkte erfuellt sind:
+
+- AD-Login, Rollenmapping und Session-Handling laufen produktiv stabil
+- Dashboard, ActiveDirectory, Nutanix, Endpoint Central, Citrix und Rollout sind fachlich nutzbar
+- alle benoetigten Live-Integrationen sind ohne Mock-Komponenten einsatzfaehig
+- Rollout inklusive Start, Continue, Resume, Delete und ReRollout ist im Web abgeschlossen nutzbar
+- AD-Unterbereiche Users & Computers, Auswertungen, DNS und DHCP sind fachlich umgesetzt
+- Citrix-On-Prem-Funktionen laufen ueber den produktiven Windows-Connector
+- Logging, Audit, Fehlerdiagnose und Deployment-Dokumentation sind vorhanden
+- die benoetigten Betriebsprozesse koennen ohne Rueckgriff auf Rollout-Monitor abgewickelt werden
 
 ## Definition of Done
 
@@ -430,6 +482,13 @@ Ein Arbeitspaket gilt erst dann als abgeschlossen, wenn:
 - Fehlerfaelle sichtbar behandelt werden
 - der Ablauf dokumentiert oder im README/Plan nachgezogen wurde
 - der Schritt validiert und commitbar ist
+
+Das Gesamtprojekt gilt erst dann als abgeschlossen, wenn zusaetzlich:
+
+- alle Phasen dieses Plans vollstaendig umgesetzt sind
+- alle Hauptmodule live und ohne Mock-Abhaengigkeit arbeiten
+- die Abnahmekriterien fuer die fertige Web-App erfuellt sind
+- die Web-App den vorgesehenen Altprozess vollstaendig ersetzt
 
 ## Vorschlag fuer die naechste Umsetzungsreihenfolge
 
@@ -455,6 +514,10 @@ Eine realistische Verteilung waere:
 
 Die tatsaechliche Anzahl haengt davon ab, wie viel der Rollout-Monitor-Fachlogik 1:1 uebernommen werden kann und wie stark produktive Sicherheitsanforderungen die schreibenden Aktionen einschraenken.
 
+## Zielaussage
+
+Dieser Plan ist so zu verstehen, dass nach seiner vollstaendigen Umsetzung keine fachlich relevante Restmigration mehr offen ist. Nach Planende soll die Admin Startpage als vollwertige, betriebsreife Web-App einsetzbar sein.
+
 ## Empfehlung
 
-Der technisch sinnvollste naechste Schritt ist die Portierung der echten Nutanix-Rollout-Ausfuehrung. Die vorhandene Web-Struktur fuer Jobs, Runtime-Dateien, Status-Synchronisation und Worker-Steuerung ist inzwischen weit genug, dass dieser Block den groessten fachlichen Fortschritt liefert.
+Der technisch sinnvollste naechste Schritt bleibt die Portierung der echten Nutanix-Rollout-Ausfuehrung. Sie ist der groesste verbleibende Kernblock auf dem Weg zur vollstaendig fertigen Web-App.
