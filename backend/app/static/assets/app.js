@@ -8,6 +8,7 @@ const state = {
   activeAdNode: "ad-users-computers",
   adTreeExpanded: true,
   connector: null,
+  sessionExpiresAt: "",
 };
 
 const NAV_STRUCTURE = [
@@ -90,10 +91,28 @@ async function request(path, options = {}) {
   const response = await fetch(path, { ...options, headers });
   const payload = await response.json().catch(() => ({}));
   if (!response.ok) {
+    if (response.status === 401 && state.token) {
+      resetClientState();
+    }
     const message = payload.detail || payload.message || "Anfrage fehlgeschlagen.";
     throw new Error(message);
   }
   return payload;
+}
+
+function resetClientState() {
+  localStorage.removeItem("startpage.sessionToken");
+  state.token = "";
+  state.user = null;
+  state.dashboard = { headline: "", widgets: [] };
+  state.integrations = [];
+  state.activeIntegration = null;
+  state.activeNav = "dashboard";
+  state.activeAdNode = "ad-users-computers";
+  state.adTreeExpanded = true;
+  state.sessionExpiresAt = "";
+  elements.appView.classList.add("hidden");
+  elements.loginView.classList.remove("hidden");
 }
 
 function setMessage(message, type = "") {
@@ -230,12 +249,14 @@ function renderUserContext() {
   if (!state.user) {
     return "";
   }
+  const sessionInfo = state.sessionExpiresAt ? new Date(state.sessionExpiresAt).toLocaleString("de-DE") : "-";
   return `
     <div class="info-card">
       <div class="meta-row"><span>Display Name</span><strong>${state.user.displayName}</strong></div>
       <div class="meta-row"><span>Benutzer</span><strong>${state.user.username}</strong></div>
       <div class="meta-row"><span>E-Mail</span><strong>${state.user.email || "-"}</strong></div>
       <div class="meta-row"><span>DN</span><strong>${state.user.distinguishedName}</strong></div>
+      <div class="meta-row"><span>Session gueltig bis</span><strong>${sessionInfo}</strong></div>
     </div>
     <div class="info-card">
       <h4>Rollen</h4>
@@ -522,6 +543,7 @@ async function login(username, password) {
   state.token = payload.sessionToken;
   state.user = payload.user;
   state.dashboard = payload.dashboard;
+  state.sessionExpiresAt = payload.expiresAt || "";
   state.activeNav = "dashboard";
   state.activeAdNode = "ad-users-computers";
   localStorage.setItem("startpage.sessionToken", state.token);
@@ -541,12 +563,12 @@ async function bootstrapSession() {
     const payload = await request("/api/me");
     state.user = payload.user;
     state.dashboard = payload.dashboard;
+    state.sessionExpiresAt = payload.expiresAt || "";
     state.activeNav = "dashboard";
     renderApp();
     await loadIntegrations(false);
   } catch (_error) {
-    localStorage.removeItem("startpage.sessionToken");
-    state.token = "";
+    resetClientState();
   }
 }
 
@@ -564,15 +586,13 @@ elements.searchInput.addEventListener("input", () => {
   renderCurrentView();
 });
 
-elements.logoutButton.addEventListener("click", () => {
-  localStorage.removeItem("startpage.sessionToken");
-  state.token = "";
-  state.user = null;
-  state.dashboard = { headline: "", widgets: [] };
-  state.integrations = [];
-  state.activeIntegration = null;
-  state.activeNav = "dashboard";
-  state.activeAdNode = "ad-users-computers";
+elements.logoutButton.addEventListener("click", async () => {
+  try {
+    await request("/api/auth/logout", { method: "POST" });
+  } catch (_error) {
+    // Client-State trotzdem lokal zuruecksetzen.
+  }
+  resetClientState();
   window.location.reload();
 });
 

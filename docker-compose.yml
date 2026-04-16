@@ -6,14 +6,17 @@ services:
     ports:
       - "8080:8080"
     environment:
-      STARTPAGE_ENABLE_MOCK_AUTH: "true"
-      STARTPAGE_ENABLE_MOCK_INTEGRATIONS: "true"
-      STARTPAGE_CONNECTOR_ENABLED: "false"
-      STARTPAGE_CONNECTOR_URL: "http://startpage-connector:8090"
-      STARTPAGE_LDAP_SERVER: "ldaps://dc.de.toyota-fs.com"
-      STARTPAGE_LDAP_BASE_DN: "DC=de,DC=toyota-fs,DC=com"
-      STARTPAGE_LDAP_DOMAIN_SUFFIX: "de.toyota-fs.com"
-      STARTPAGE_SESSION_TTL_MINUTES: "480"
+      STARTPAGE_ENABLE_MOCK_AUTH: "${STARTPAGE_ENABLE_MOCK_AUTH:-true}"
+      STARTPAGE_ENABLE_MOCK_INTEGRATIONS: "${STARTPAGE_ENABLE_MOCK_INTEGRATIONS:-true}"
+      STARTPAGE_CONNECTOR_ENABLED: "${STARTPAGE_CONNECTOR_ENABLED:-false}"
+      STARTPAGE_CONNECTOR_URL: "${STARTPAGE_CONNECTOR_URL:-http://startpage-connector:8090}"
+      STARTPAGE_CONNECTOR_TIMEOUT_SECONDS: "${STARTPAGE_CONNECTOR_TIMEOUT_SECONDS:-6}"
+      STARTPAGE_ALLOWED_ORIGINS: "${STARTPAGE_ALLOWED_ORIGINS:-*}"
+      STARTPAGE_LDAP_SERVER: "${STARTPAGE_LDAP_SERVER:-ldaps://dc.de.toyota-fs.com}"
+      STARTPAGE_LDAP_BASE_DN: "${STARTPAGE_LDAP_BASE_DN:-DC=de,DC=toyota-fs,DC=com}"
+      STARTPAGE_LDAP_DOMAIN_SUFFIX: "${STARTPAGE_LDAP_DOMAIN_SUFFIX:-de.toyota-fs.com}"
+      STARTPAGE_SESSION_TTL_MINUTES: "${STARTPAGE_SESSION_TTL_MINUTES:-480}"
+      STARTPAGE_MOCK_GROUPS: "${STARTPAGE_MOCK_GROUPS:-Startpage-Users,Startpage-Dashboard-Editors,Startpage-Platform-Admins,Startpage-Citrix-Admins}"
     volumes:
       - ./data:/app/data
     restart: unless-stopped
@@ -27,6 +30,6 @@ services:
     ports:
       - "8090:8090"
     environment:
-      STARTPAGE_CONNECTOR_MOCK: "true"
-      STARTPAGE_CITRIX_ADMIN_ADDRESS: "ddc01.local"
+      STARTPAGE_CONNECTOR_MOCK: "${STARTPAGE_CONNECTOR_MOCK:-true}"
+      STARTPAGE_CITRIX_ADMIN_ADDRESS: "${STARTPAGE_CITRIX_ADMIN_ADDRESS:-ddc01.local}"
     restart: unless-stopped

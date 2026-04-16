@@ -97,11 +97,16 @@ Startpage/
 
 ## Schnellstart
 
+Vor dem ersten Docker-Start sollte die Konfiguration aus `.env.example` in eine lokale `.env` uebernommen und fuer die Umgebung angepasst werden.
+
 ### Docker
 
 Im Projektordner:
 
 ```powershell
+# optional einmalig
+Copy-Item .env.example .env
+
 docker compose up --build
 ```
 
@@ -149,6 +154,8 @@ Fuer produktionsnaehere Tests muessen mindestens diese Variablen gesetzt werden:
 - `STARTPAGE_LDAP_SERVER`
 - `STARTPAGE_LDAP_BASE_DN`
 - `STARTPAGE_LDAP_DOMAIN_SUFFIX`
+
+Das Backend meldet unvollstaendige Runtime-Konfigurationen zusaetzlich ueber den Health-Endpoint, damit Deployments mit deaktiviertem Mock-Modus schneller auffallen.
 
 ## Herkunft der Fachlogik
 

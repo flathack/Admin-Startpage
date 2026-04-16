@@ -7,10 +7,16 @@ import requests
 
 
 class ConnectorClient:
-    def __init__(self) -> None:
-        self._base_url = os.getenv("STARTPAGE_CONNECTOR_URL", "http://localhost:8090").rstrip("/")
-        self._enabled = os.getenv("STARTPAGE_CONNECTOR_ENABLED", "false").lower() == "true"
-        self._timeout = int(os.getenv("STARTPAGE_CONNECTOR_TIMEOUT_SECONDS", "6"))
+    def __init__(
+        self,
+        *,
+        base_url: str | None = None,
+        enabled: bool | None = None,
+        timeout: int | None = None,
+    ) -> None:
+        self._base_url = (base_url or os.getenv("STARTPAGE_CONNECTOR_URL", "http://localhost:8090")).rstrip("/")
+        self._enabled = enabled if enabled is not None else os.getenv("STARTPAGE_CONNECTOR_ENABLED", "false").lower() == "true"
+        self._timeout = timeout if timeout is not None else int(os.getenv("STARTPAGE_CONNECTOR_TIMEOUT_SECONDS", "6"))
 
     @property
     def enabled(self) -> bool:

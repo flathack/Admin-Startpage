@@ -17,12 +17,18 @@ class IntegrationService:
         config_path: Path,
         permission_service: PermissionService,
         connector_client: ConnectorClient,
+        *,
+        mock_enabled: bool | None = None,
     ) -> None:
         self._config_path = config_path
         self._permission_service = permission_service
         self._connector_client = connector_client
         self._config = json.loads(config_path.read_text(encoding="utf-8"))
-        self._mock_enabled = os.getenv("STARTPAGE_ENABLE_MOCK_INTEGRATIONS", "true").lower() == "true"
+        self._mock_enabled = (
+            mock_enabled
+            if mock_enabled is not None
+            else os.getenv("STARTPAGE_ENABLE_MOCK_INTEGRATIONS", "true").lower() == "true"
+        )
 
     def overview(self, user_session: UserSession, *, session_password: str) -> list[dict[str, Any]]:
         items: list[dict[str, Any]] = []

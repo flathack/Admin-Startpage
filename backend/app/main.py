@@ -17,6 +17,7 @@ from app.services.connector_client import ConnectorClient
 from app.services.dashboard_store import DashboardStore
 from app.services.integration_service import IntegrationService
 from app.services.permission_service import PermissionService, UserSession
+from app.settings import AppSettings
 
 
 class LoginRequest(BaseModel):
@@ -41,18 +42,36 @@ STATIC_DIR = APP_DIR / "static"
 CONFIG_DIR = APP_DIR / "config"
 DATA_DIR = PROJECT_DIR / "data" / "users"
 
-auth_service = ADAuthService.from_environment()
+settings = AppSettings.from_environment()
+started_at = datetime.now(timezone.utc)
+
+auth_service = ADAuthService(
+    ldap_server=settings.ldap_server,
+    base_dn=settings.ldap_base_dn,
+    domain_suffix=settings.ldap_domain_suffix,
+    enable_mock_auth=settings.mock_auth_enabled,
+    mock_groups=settings.mock_groups,
+)
 permission_service = PermissionService(CONFIG_DIR)
 dashboard_store = DashboardStore(DATA_DIR)
-connector_client = ConnectorClient()
-integration_service = IntegrationService(CONFIG_DIR / "integrations.json", permission_service, connector_client)
-session_ttl = int(os.getenv("STARTPAGE_SESSION_TTL_MINUTES", "480"))
+connector_client = ConnectorClient(
+    base_url=settings.connector_url,
+    enabled=settings.connector_enabled,
+    timeout=settings.connector_timeout_seconds,
+)
+integration_service = IntegrationService(
+    CONFIG_DIR / "integrations.json",
+    permission_service,
+    connector_client,
+    mock_enabled=settings.mock_integrations_enabled,
+)
+session_ttl = settings.session_ttl_minutes
 sessions: dict[str, StoredSession] = {}
 
 app = FastAPI(title="Admin Startpage", version="0.1.0")
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=list(settings.allowed_origins),
     allow_methods=["*"],
     allow_headers=["*"],
 )
@@ -74,6 +93,12 @@ def _get_session(session_token: str | None) -> StoredSession:
     if payload is None:
         raise HTTPException(status_code=401, detail="Session ungueltig oder abgelaufen.")
     return payload
+
+
+def _delete_session(session_token: str | None) -> None:
+    if not session_token:
+        return
+    sessions.pop(session_token, None)
 
 
 def _session_response(user_session: UserSession) -> dict[str, Any]:
@@ -115,11 +140,16 @@ def _require_permission(user_session: UserSession, permission: str) -> None:
 @app.get("/api/health")
 def health() -> dict[str, Any]:
     connector_status = connector_client.status()
+    warnings = settings.runtime_warnings()
     return {
-        "status": "ok",
-        "mockAuth": os.getenv("STARTPAGE_ENABLE_MOCK_AUTH", "true").lower() == "true",
-        "mockIntegrations": os.getenv("STARTPAGE_ENABLE_MOCK_INTEGRATIONS", "true").lower() == "true",
+        "status": "ok" if not warnings else "degraded",
+        "mockAuth": settings.mock_auth_enabled,
+        "mockIntegrations": settings.mock_integrations_enabled,
         "timestamp": datetime.now(timezone.utc).isoformat(),
+        "startedAt": started_at.isoformat(),
+        "activeSessions": len(sessions),
+        "allowedOrigins": list(settings.allowed_origins),
+        "warnings": warnings,
         "connectorMode": "windows-connector-required-for-rsat-and-citrix-automation",
         "connector": connector_status,
     }
@@ -162,15 +192,26 @@ def login(payload: LoginRequest) -> dict[str, Any]:
     }
 
 
+@app.post("/api/auth/logout")
+def logout(x_session_token: str | None = Header(default=None)) -> dict[str, bool]:
+    _delete_session(x_session_token)
+    return {"loggedOut": True}
+
+
 @app.get("/api/me")
 def current_user(x_session_token: str | None = Header(default=None)) -> dict[str, Any]:
     stored_session = _get_session(x_session_token)
     user_session = _build_user_session(stored_session)
     dashboard = dashboard_store.load(user_session.identity.username)
+    expires_in_seconds = max(
+        0,
+        int((stored_session.expires_at - datetime.now(timezone.utc)).total_seconds()),
+    )
     return {
         "user": _session_response(user_session),
         "dashboard": dashboard,
         "expiresAt": stored_session.expires_at.isoformat(),
+        "expiresInSeconds": expires_in_seconds,
     }
 
 
