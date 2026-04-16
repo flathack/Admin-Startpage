@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import logging
 import os
 import secrets
 from datetime import datetime, timedelta, timezone
@@ -12,6 +13,18 @@ from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 
+# Configure structured logging
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
+    handlers=[
+        logging.StreamHandler(),
+        logging.FileHandler(PROJECT_DIR / "data" / "logs" / "app.log") if (PROJECT_DIR / "data" / "logs").exists() else logging.NullHandler(),
+    ],
+)
+logger = logging.getLogger("admin-startpage")
+
+from app.services.ad_service import ADService, ADServiceError, create_from_settings
 from app.services.auth_service import ADAuthService, ADIdentity, AuthenticationError
 from app.services.connector_client import ConnectorClient
 from app.services.dashboard_store import DashboardStore
@@ -117,14 +130,17 @@ def _prune_expired_sessions() -> None:
     expired = [token for token, payload in sessions.items() if payload.expires_at <= now]
     for token in expired:
         sessions.pop(token, None)
+        logger.info(f"Session expired and removed: {token[:8]}...")
 
 
 def _get_session(session_token: str | None) -> StoredSession:
     _prune_expired_sessions()
     if not session_token:
+        logger.warning("Session token missing in request")
         raise HTTPException(status_code=401, detail="Session-Token fehlt.")
     payload = sessions.get(session_token)
     if payload is None:
+        logger.warning(f"Invalid or expired session token: {session_token[:8] if session_token else 'None'}...")
         raise HTTPException(status_code=401, detail="Session ungueltig oder abgelaufen.")
     return payload
 
@@ -191,9 +207,11 @@ def health() -> dict[str, Any]:
 
 @app.post("/api/auth/login")
 def login(payload: LoginRequest) -> dict[str, Any]:
+    logger.info(f"Login attempt for user: {payload.username}")
     try:
         identity = auth_service.authenticate(payload.username, payload.password)
     except AuthenticationError as exc:
+        logger.warning(f"Login failed for {payload.username}: {exc}")
         raise HTTPException(status_code=401, detail=str(exc)) from exc
 
     user_session = permission_service.build_session(identity)
@@ -217,6 +235,7 @@ def login(payload: LoginRequest) -> dict[str, Any]:
             "auth_password": payload.password,
         },
     )
+    logger.info(f"User {payload.username} logged in successfully, session: {token[:8]}...")
 
     return {
         "sessionToken": token,
@@ -228,6 +247,11 @@ def login(payload: LoginRequest) -> dict[str, Any]:
 
 @app.post("/api/auth/logout")
 def logout(x_session_token: str | None = Header(default=None)) -> dict[str, bool]:
+    if x_session_token:
+        stored = sessions.get(x_session_token)
+        if stored:
+            username = stored.session.get("identity", {}).get("username", "unknown")
+            logger.info(f"User {username} logging out, session: {x_session_token[:8]}...")
     _delete_session(x_session_token)
     return {"loggedOut": True}
 
@@ -440,6 +464,206 @@ def restart_rollout_job(job_id: str, x_session_token: str | None = Header(defaul
     except KeyError as exc:
         raise HTTPException(status_code=404, detail=f"Unbekannter Rollout-Job: {job_id}") from exc
     return {"job": job.to_api(), "summary": rollout_service.summary()}
+
+
+@app.delete("/api/rollout/jobs/{job_id}")
+def delete_rollout_job(
+    job_id: str,
+    hard_delete: bool = False,
+    x_session_token: str | None = Header(default=None),
+) -> dict[str, Any]:
+    """Delete a rollout job. Use hard_delete=true for permanent removal."""
+    stored_session = _get_session(x_session_token)
+    user_session = _build_user_session(stored_session)
+    _require_permission(user_session, "rollout.manage")
+    try:
+        result = rollout_service.delete_job(job_id, hard_delete=hard_delete)
+    except KeyError as exc:
+        raise HTTPException(status_code=404, detail=f"Unbekannter Rollout-Job: {job_id}") from exc
+    return {**result, "summary": rollout_service.summary()}
+
+
+@app.post("/api/rollout/jobs/{job_id}/rerollout")
+def rerollout_rollout_job(job_id: str, x_session_token: str | None = Header(default=None)) -> dict[str, Any]:
+    """Create a new rollout job based on an existing job (Re-Rollout)."""
+    stored_session = _get_session(x_session_token)
+    user_session = _build_user_session(stored_session)
+    _require_permission(user_session, "rollout.create")
+    try:
+        new_job = rollout_service.rerollout_job(job_id)
+    except KeyError as exc:
+        raise HTTPException(status_code=404, detail=f"Unbekannter Rollout-Job: {job_id}") from exc
+    return {"job": new_job.to_api(), "originalJobId": job_id, "summary": rollout_service.summary()}
+
+
+# Active Directory endpoints
+def _get_ad_service() -> ADService | None:
+    """Create AD service instance if LDAP is configured."""
+    if settings.mock_auth_enabled:
+        return None  # No real AD in mock mode
+    if not all([settings.ldap_server, settings.ldap_base_dn]):
+        return None
+    return create_from_settings(
+        ldap_server=settings.ldap_server,
+        base_dn=settings.ldap_base_dn,
+    )
+
+
+@app.get("/api/ad/users")
+def ad_users(
+    search: str = "",
+    limit: int = 50,
+    x_session_token: str | None = Header(default=None),
+) -> dict[str, Any]:
+    """Search AD users."""
+    stored_session = _get_session(x_session_token)
+    user_session = _build_user_session(stored_session)
+    _require_permission(user_session, "ad.view")
+    
+    ad_service = _get_ad_service()
+    if ad_service is None:
+        return {"users": [], "mode": "mock", "message": "AD in Mock-Modus"}
+    
+    try:
+        ad_service.connect()
+        filter_str = f"(&(objectClass=user)(sAMAccountName=*{search}*))" if search else "(objectClass=user)"
+        users = ad_service.search_users(search_filter=filter_str, limit=limit)
+        ad_service.disconnect()
+        return {"users": [u.__dict__ for u in users], "mode": "live", "count": len(users)}
+    except ADServiceError as exc:
+        raise HTTPException(status_code=500, detail=str(exc))
+
+
+@app.get("/api/ad/computers")
+def ad_computers(
+    search: str = "",
+    limit: int = 50,
+    x_session_token: str | None = Header(default=None),
+) -> dict[str, Any]:
+    """Search AD computers."""
+    stored_session = _get_session(x_session_token)
+    user_session = _build_user_session(stored_session)
+    _require_permission(user_session, "ad.view")
+    
+    ad_service = _get_ad_service()
+    if ad_service is None:
+        return {"computers": [], "mode": "mock", "message": "AD in Mock-Modus"}
+    
+    try:
+        ad_service.connect()
+        filter_str = f"(&(objectClass=computer)(name=*{search}*))" if search else "(objectClass=computer)"
+        computers = ad_service.search_computers(search_filter=filter_str, limit=limit)
+        ad_service.disconnect()
+        return {"computers": [c.__dict__ for c in computers], "mode": "live", "count": len(computers)}
+    except ADServiceError as exc:
+        raise HTTPException(status_code=500, detail=str(exc))
+
+
+@app.get("/api/ad/groups")
+def ad_groups(
+    search: str = "",
+    limit: int = 50,
+    x_session_token: str | None = Header(default=None),
+) -> dict[str, Any]:
+    """Search AD groups."""
+    stored_session = _get_session(x_session_token)
+    user_session = _build_user_session(stored_session)
+    _require_permission(user_session, "ad.view")
+    
+    ad_service = _get_ad_service()
+    if ad_service is None:
+        return {"groups": [], "mode": "mock", "message": "AD in Mock-Modus"}
+    
+    try:
+        ad_service.connect()
+        filter_str = f"(&(objectClass=group)(cn=*{search}*))" if search else "(objectClass=group)"
+        groups = ad_service.search_groups(search_filter=filter_str, limit=limit)
+        ad_service.disconnect()
+        return {"groups": [g.__dict__ for g in groups], "mode": "live", "count": len(groups)}
+    except ADServiceError as exc:
+        raise HTTPException(status_code=500, detail=str(exc))
+
+
+@app.get("/api/ad/ous")
+def ad_ous(x_session_token: str | None = Header(default=None)) -> dict[str, Any]:
+    """Get Organizational Units from AD."""
+    stored_session = _get_session(x_session_token)
+    user_session = _build_user_session(stored_session)
+    _require_permission(user_session, "ad.view")
+    
+    ad_service = _get_ad_service()
+    if ad_service is None:
+        return {"ous": [], "mode": "mock"}
+    
+    try:
+        ad_service.connect()
+        ous = ad_service.get_ous()
+        ad_service.disconnect()
+        return {"ous": [o.__dict__ for o in ous], "mode": "live", "count": len(ous)}
+    except ADServiceError as exc:
+        raise HTTPException(status_code=500, detail=str(exc))
+
+
+# Citrix On-Prem endpoints (via Connector)
+@app.get("/api/citrix/summary")
+def citrix_summary(x_session_token: str | None = Header(default=None)) -> dict[str, Any]:
+    """Get Citrix farm summary via Windows Connector."""
+    stored_session = _get_session(x_session_token)
+    user_session = _build_user_session(stored_session)
+    _require_permission(user_session, "citrix.view")
+    
+    result = connector_client.citrix_summary()
+    if result is None:
+        return {
+            "machines": [],
+            "mode": "mock",
+            "message": "Citrix via Connector nicht verfuegbar. Verwende Mock-Daten.",
+            "connectorEnabled": connector_client.enabled,
+        }
+    return result
+
+
+@app.get("/api/citrix/machines")
+def citrix_machines(x_session_token: str | None = Header(default=None)) -> dict[str, Any]:
+    """Get Citrix machines via Windows Connector."""
+    stored_session = _get_session(x_session_token)
+    user_session = _build_user_session(stored_session)
+    _require_permission(user_session, "citrix.view")
+    
+    result = connector_client.citrix_machines()
+    if result is None:
+        return {"machines": [], "mode": "mock"}
+    return result
+
+
+@app.get("/api/citrix/delivery-groups")
+def citrix_delivery_groups(x_session_token: str | None = Header(default=None)) -> dict[str, Any]:
+    """Get Citrix Delivery Groups via Windows Connector."""
+    stored_session = _get_session(x_session_token)
+    user_session = _build_user_session(stored_session)
+    _require_permission(user_session, "citrix.view")
+    
+    result = connector_client.citrix_delivery_groups()
+    if result is None:
+        return {"deliveryGroups": [], "mode": "mock"}
+    return result
+
+
+@app.post("/api/citrix/machines/{machine_name}/maintenance")
+def citrix_set_maintenance(
+    machine_name: str,
+    enabled: bool,
+    x_session_token: str | None = Header(default=None),
+) -> dict[str, Any]:
+    """Enable/disable maintenance mode for a Citrix machine."""
+    stored_session = _get_session(x_session_token)
+    user_session = _build_user_session(stored_session)
+    _require_permission(user_session, "citrix.manage")
+    
+    result = connector_client.citrix_set_maintenance(machine_name, enabled)
+    if result is None:
+        raise HTTPException(status_code=503, detail="Citrix Connector nicht verfuegbar")
+    return result
 
 
 @app.get("/")

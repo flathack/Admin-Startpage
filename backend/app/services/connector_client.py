@@ -81,3 +81,46 @@ class ConnectorClient:
             return response.json()
         except Exception:
             return None
+
+    def citrix_machines(self) -> dict[str, Any] | None:
+        """Get list of Citrix machines from on-prem DDC."""
+        if not self._enabled:
+            return None
+        try:
+            response = requests.get(
+                f"{self._base_url}/api/citrix/machines",
+                timeout=self._timeout,
+            )
+            response.raise_for_status()
+            return response.json()
+        except Exception:
+            return None
+
+    def citrix_delivery_groups(self) -> dict[str, Any] | None:
+        """Get Citrix Delivery Groups from on-prem DDC."""
+        if not self._enabled:
+            return None
+        try:
+            response = requests.get(
+                f"{self._base_url}/api/citrix/delivery-groups",
+                timeout=self._timeout,
+            )
+            response.raise_for_status()
+            return response.json()
+        except Exception:
+            return None
+
+    def citrix_set_maintenance(self, machine_name: str, enabled: bool) -> dict[str, Any] | None:
+        """Enable or disable maintenance mode for a Citrix machine."""
+        if not self._enabled:
+            return None
+        try:
+            response = requests.post(
+                f"{self._base_url}/api/citrix/machines/{machine_name}/maintenance",
+                json={"enabled": enabled},
+                timeout=self._timeout,
+            )
+            response.raise_for_status()
+            return response.json()
+        except Exception:
+            return None

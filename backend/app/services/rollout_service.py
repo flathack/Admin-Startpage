@@ -87,6 +87,52 @@ class RolloutService:
         self._job_store.save_job(job)
         return job
 
+    def delete_job(self, job_id: str, *, hard_delete: bool = False) -> dict[str, Any]:
+        """Delete a rollout job. Soft delete by default, hard delete if hard_delete=True."""
+        job = self.get_job(job_id)
+        
+        if hard_delete:
+            # Remove from storage completely
+            self._job_store.delete_job(job_id)
+            return {"deleted": True, "hardDelete": True, "jobId": job_id}
+        
+        # Soft delete - mark as deleted
+        job.status = RolloutStatus.DELETED
+        job.client_stage = "Geloescht"
+        job.client_message = "Job wurde als geloescht markiert."
+        job.client_updated_at = time()
+        self._job_store.save_job(job)
+        return {"deleted": True, "hardDelete": False, "jobId": job_id}
+
+    def rerollout_job(self, job_id: str) -> RolloutJob:
+        """Create a new job based on an existing job (Re-Rollout)."""
+        original_job = self.get_job(job_id)
+        
+        # Create new job with same parameters but new ID
+        new_job = RolloutJob(
+            job_id=self._next_job_id(),
+            hostname=original_job.hostname,
+            template=original_job.template,
+            cluster=original_job.cluster,
+            network=original_job.network,
+            created_by=original_job.created_by,
+            bootstrap_name=original_job.bootstrap_name,
+            status=RolloutStatus.PLANNED,
+            progress=0,
+            client_stage="Re-Rollout vorbereitet",
+            client_message=f"Re-Rollout von {original_job.job_id} angelegt.",
+            tags=original_job.tags.copy(),
+        )
+        self._job_store.save_job(new_job)
+        
+        # Mark original as superseded
+        original_job.client_stage = "Superseded"
+        original_job.client_message = f"Superseded by {new_job.job_id}"
+        original_job.client_updated_at = time()
+        self._job_store.save_job(original_job)
+        
+        return new_job
+
     def record_control_action(self, job_id: str, action: str) -> RolloutJob:
         job = self.get_job(job_id)
         normalized_action = action.strip().upper()

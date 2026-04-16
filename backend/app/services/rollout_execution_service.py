@@ -1,13 +1,18 @@
 from __future__ import annotations
 
 import json
+import logging
 import threading
 import time
 from pathlib import Path
 from typing import Any
 
+from .nutanix_client import NutanixClient, create_from_config, NutanixApiError
 from .rollout_job_store import RolloutJobStore
 from .rollout_models import RolloutJob, RolloutStatus
+
+
+logger = logging.getLogger("admin-startpage.rollout")
 
 
 class RolloutExecutionService:
@@ -58,9 +63,13 @@ class RolloutExecutionService:
             nutanix_definition = self._find_system("nutanix")
             use_mock = self._mock_enabled or bool(nutanix_definition.get("mock", False))
             if use_mock:
+                logger.info(f"Running mock job for {job_id}")
                 self._run_mock_job(job)
                 return
-            self._run_live_placeholder(job, username=username, password=password)
+            logger.info(f"Running live Nutanix job for {job_id}")
+            self._run_live_job(job, username=username, password=password)
+        except Exception as exc:
+            logger.error(f"Job {job_id} failed with exception: {exc}")
         finally:
             with self._lock:
                 self._running_job_ids.discard(job_id)
@@ -83,18 +92,95 @@ class RolloutExecutionService:
             job.client_updated_at = time.time()
             self._job_store.save_job(job)
 
-    def _run_live_placeholder(self, job: RolloutJob, *, username: str, password: str) -> None:
-        base_url = str(self._find_system("nutanix").get("base_url", "")).strip()
-        verify_tls = bool(self._find_system("nutanix").get("verify_tls", True))
-        job = self._load_job(job.job_id)
-        job.update_status(RolloutStatus.ERROR, job.progress)
-        job.client_stage = "Live-Start noch unvollstaendig"
-        job.client_message = (
-            "Live-Nutanix-Start ist vorbereitet, aber create_clone/boot-Operationen sind noch nicht vollstaendig portiert. "
-            f"Basis: {base_url or 'keine URL'} | TLS: {verify_tls} | User: {username or '-'}"
-        )
-        job.client_updated_at = time.time()
-        self._job_store.save_job(job)
+    def _run_live_job(self, job: RolloutJob, *, username: str, password: str) -> None:
+        """Execute actual Nutanix VM provisioning."""
+        try:
+            nutanix_config = self._find_system("nutanix")
+            logger.info(f"Starting live Nutanix rollout for job {job.job_id}")
+            
+            client = create_from_config(nutanix_config, username, password)
+            
+            # Get cluster and template info
+            clusters = client.list_clusters()
+            if not clusters:
+                raise NutanixApiError("No clusters available")
+            cluster = clusters[0]
+            cluster_uuid = cluster.get("uuid")
+            logger.info(f"Using cluster: {cluster.get('name')} ({cluster_uuid})")
+            
+            # List templates (images)
+            templates = client.list_vm_templates(cluster_uuid)
+            template_uuid = None
+            for t in templates:
+                if job.template.lower() in t.get("name", "").lower():
+                    template_uuid = t.get("uuid")
+                    break
+            
+            if not template_uuid:
+                # Try first available template
+                if templates:
+                    template_uuid = templates[0].get("uuid")
+                    logger.info(f"Using first available template: {templates[0].get('name')}")
+                else:
+                    raise NutanixApiError(f"No templates found matching: {job.template}")
+            
+            # Create VM from template
+            job.update_status(RolloutStatus.CLONE_CREATING, 15)
+            job.client_stage = "CLONE_CREATING"
+            job.client_message = "Creating VM clone on Nutanix cluster..."
+            self._job_store.save_job(job)
+            
+            result = client.create_vm_from_template(
+                vm_name=job.hostname,
+                template_uuid=template_uuid,
+                cluster_uuid=cluster_uuid,
+                vlan=job.network,
+            )
+            
+            vm_uuid = result.get("uuid")
+            logger.info(f"VM created with UUID: {vm_uuid}")
+            
+            job.update_status(RolloutStatus.CLONE_CREATING, 35)
+            job.client_stage = "CLONE_CREATING"
+            job.client_message = "VM clone created, starting VM..."
+            self._job_store.save_job(job)
+            
+            # Power on VM
+            client.power_on_vm(vm_uuid)
+            logger.info(f"VM {job.hostname} powered on")
+            
+            job.update_status(RolloutStatus.BOOTING, 50)
+            job.client_stage = "BOOTING"
+            job.client_message = "VM is booting, waiting for WinPE..."
+            self._job_store.save_job(job)
+            
+            # Wait briefly and check status
+            time.sleep(5)
+            power_state = client.get_vm_power_state(vm_uuid)
+            logger.info(f"VM power state: {power_state}")
+            
+            # Mark as rollout running - waiting for ASSIGN/ACK
+            job.update_status(RolloutStatus.ROLLOUT_RUNNING, 60)
+            job.client_stage = "ROLLOUT_RUNNING"
+            job.client_message = "VM booted, waiting for WinPE registration and ASSIGN/ACK..."
+            job.client_updated_at = time.time()
+            self._job_store.save_job(job)
+            logger.info(f"Live Nutanix rollout completed for job {job.job_id}")
+            
+        except NutanixApiError as exc:
+            logger.error(f"Nutanix API error for job {job.job_id}: {exc}")
+            job.update_status(RolloutStatus.ERROR, job.progress)
+            job.client_stage = "ERROR"
+            job.client_message = f"Nutanix API Error: {exc}"
+            job.client_updated_at = time.time()
+            self._job_store.save_job(job)
+        except Exception as exc:
+            logger.error(f"Unexpected error during live rollout for job {job.job_id}: {exc}")
+            job.update_status(RolloutStatus.ERROR, job.progress)
+            job.client_stage = "ERROR"
+            job.client_message = f"Rollout Error: {exc}"
+            job.client_updated_at = time.time()
+            self._job_store.save_job(job)
 
     def _load_job(self, job_id: str) -> RolloutJob:
         for job in self._job_store.load_jobs():
