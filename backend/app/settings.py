@@ -38,6 +38,7 @@ class AppSettings:
     rollout_name_map_dir: str
     rollout_control_dir: str
     rollout_status_dir: str
+    rollout_mock_step_delay_seconds: int
 
     @classmethod
     def from_environment(cls) -> "AppSettings":
@@ -60,6 +61,7 @@ class AppSettings:
             rollout_name_map_dir=os.getenv("STARTPAGE_ROLLOUT_NAME_MAP_DIR", "").strip(),
             rollout_control_dir=os.getenv("STARTPAGE_ROLLOUT_CONTROL_DIR", "").strip(),
             rollout_status_dir=os.getenv("STARTPAGE_ROLLOUT_STATUS_DIR", "").strip(),
+            rollout_mock_step_delay_seconds=max(1, _read_int("STARTPAGE_ROLLOUT_MOCK_STEP_DELAY_SECONDS", 1)),
         )
 
     def runtime_warnings(self) -> list[str]:

@@ -511,6 +511,7 @@ function renderRolloutView() {
                 <p>${job.clientMessage || "Noch keine Ausfuehrungsdaten vorhanden."}</p>
               </div>
               <div class="widget-actions">
+                ${canManage ? `<button type="button" class="secondary" data-action="start-rollout-job" data-job-id="${job.jobId}">Start</button>` : ""}
                 <button type="button" class="secondary" data-action="inspect-rollout-runtime" data-job-id="${job.jobId}">Runtime</button>
                 ${canManage ? `<button type="button" class="secondary" data-action="sync-rollout-job" data-job-id="${job.jobId}">Sync</button>` : ""}
                 ${canManage ? `<button type="button" class="secondary" data-action="send-rollout-control" data-job-id="${job.jobId}" data-control-action="ASSIGN">Assign</button>` : ""}
@@ -852,6 +853,20 @@ elements.contentPrimary.addEventListener("click", async (event) => {
 
   if (target.dataset.action === "restart-rollout") {
     request(`/api/rollout/jobs/${target.dataset.jobId}/restart`, {
+      method: "POST",
+    })
+      .then(async () => {
+        await loadRolloutJobs();
+        renderCurrentView();
+      })
+      .catch((error) => {
+        window.alert(error.message);
+      });
+    return;
+  }
+
+  if (target.dataset.action === "start-rollout-job") {
+    request(`/api/rollout/jobs/${target.dataset.jobId}/start`, {
       method: "POST",
     })
       .then(async () => {

@@ -17,6 +17,7 @@ from app.services.connector_client import ConnectorClient
 from app.services.dashboard_store import DashboardStore
 from app.services.integration_service import IntegrationService
 from app.services.permission_service import PermissionService, UserSession
+from app.services.rollout_execution_service import RolloutExecutionService
 from app.services.rollout_job_store import RolloutJobStore
 from app.services.rollout_runtime_service import RolloutRuntimeService
 from app.services.rollout_service import RolloutService
@@ -86,6 +87,12 @@ integration_service = IntegrationService(
 )
 rollout_job_store = RolloutJobStore(ROLLOUT_TASKS_DIR)
 rollout_service = RolloutService(rollout_job_store)
+rollout_execution_service = RolloutExecutionService(
+    integrations_config_path=CONFIG_DIR / "integrations.json",
+    job_store=rollout_job_store,
+    mock_enabled=settings.mock_integrations_enabled,
+    mock_step_delay_seconds=settings.rollout_mock_step_delay_seconds,
+)
 rollout_runtime_service = RolloutRuntimeService(
     name_map_dir=ROLLOUT_NAME_MAP_DIR,
     control_dir=ROLLOUT_CONTROL_DIR,
@@ -323,6 +330,25 @@ def create_rollout_job(payload: RolloutJobCreateRequest, x_session_token: str | 
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
     return {"job": job.to_api(), "summary": rollout_service.summary()}
+
+
+@app.post("/api/rollout/jobs/{job_id}/start")
+def start_rollout_job(job_id: str, x_session_token: str | None = Header(default=None)) -> dict[str, Any]:
+    stored_session = _get_session(x_session_token)
+    user_session = _build_user_session(stored_session)
+    _require_permission(user_session, "rollout.manage")
+    try:
+        job = rollout_service.get_job(job_id)
+    except KeyError as exc:
+        raise HTTPException(status_code=404, detail=f"Unbekannter Rollout-Job: {job_id}") from exc
+    result = rollout_execution_service.start_job(
+        job,
+        username=user_session.identity.username,
+        password=str(stored_session.session.get("auth_password", "")),
+    )
+    if not result["started"]:
+        raise HTTPException(status_code=409, detail=result["message"])
+    return {**result, "job": rollout_service.get_job(job_id).to_api(), "summary": rollout_service.summary()}
 
 
 @app.get("/api/rollout/jobs/{job_id}")
