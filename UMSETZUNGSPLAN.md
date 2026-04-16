@@ -518,6 +518,8 @@ Die tatsaechliche Anzahl haengt davon ab, wie viel der Rollout-Monitor-Fachlogik
 
 Dieser Plan ist so zu verstehen, dass nach seiner vollstaendigen Umsetzung keine fachlich relevante Restmigration mehr offen ist. Nach Planende soll die Admin Startpage als vollwertige, betriebsreife Web-App einsetzbar sein.
 
+Die operative Zerlegung in konkrete Tickets befindet sich in [UMSETZUNGSBACKLOG.md](UMSETZUNGSBACKLOG.md).
+
 ## Empfehlung
 
 Der technisch sinnvollste naechste Schritt bleibt die Portierung der echten Nutanix-Rollout-Ausfuehrung. Sie ist der groesste verbleibende Kernblock auf dem Weg zur vollstaendig fertigen Web-App.
