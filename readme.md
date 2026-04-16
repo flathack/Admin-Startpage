@@ -1,120 +1,82 @@
-# Startpage fuer Admins - Architektur und Umsetzungsplan
+# Admin Startpage
+
+Admin Startpage ist ein lokales, browserbasiertes Admin-Portal mit Docker-Backend. Die Anwendung soll bestehende Betriebsfunktionen aus AD, Nutanix, Endpoint Central, vSphere und Citrix in einer gemeinsamen Oberflaeche buendeln und die Sicht pro Benutzer ueber bestehende AD-Gruppen steuern.
+
+Das Projekt ist bewusst nicht nur eine Linkliste. Ziel ist eine persoenliche Startseite mit rollenbasierter Navigation, per-User-Dashboard, zentralem Login und einer klar getrennten Integrationsschicht fuer Systeme, die direkt im Container laufen koennen, sowie Windows-nahe Spezialfaelle.
+
+## Status
+
+Der aktuelle Stand ist ein funktionsfaehiger Prototyp mit:
+
+- FastAPI-Backend im Docker-Setup
+- Browser-Frontend mit Portainer-inspirierter Shell und Sidebar-Navigation
+- AD-Login-Service mit Mock-Modus fuer lokale Entwicklung
+- Rollen- und Permission-Modell auf Basis von AD-Gruppen
+- Personalisierter Dashboard-Konfiguration pro Benutzer
+- Integrationsansichten fuer AD, Nutanix, Endpoint Central, vSphere und Citrix
+- Optionalem Windows-Connector fuer AD-RSAT- und Citrix-On-Prem-nahe Funktionen
 
 ## Zielbild
-Die Startpage wird als lokale, browserbasierte Multi-User-Anwendung umgesetzt. Die Oberflaeche laeuft im Browser, die eigentliche Logik in einem Docker-basierten Backend. Nach AD-Login sollen pro Benutzer API-Zugriffe auf AD, Nutanix, Endpoint Central, vSphere und Citrix moeglich sein, soweit die jeweilige Berechtigung ueber bestehende AD-Gruppen gegeben ist.
 
-Die Startpage ist damit kein statischer Link-Hub mehr, sondern ein persoenliches Admin-Portal mit rollenbasierter Sicht, persoenlichem Dashboard und zentralem Zugriff auf bestehende Betriebsfunktionen.
+Die Startpage wird als Multi-User-Webanwendung fuer Admins aufgebaut:
 
-## Ausgangslage aus Rollout-Monitor
-Das Projekt Rollout-Monitor bringt bereits zentrale Bausteine mit, die fuer die Webanwendung wiederverwendet oder fachlich uebernommen werden koennen:
+- Login mit AD-Admin-Account
+- Aufloesung von AD-Gruppen in Rollen und Permissions
+- Personalisierte Startseite pro Benutzer
+- Sichtbare Module nur bei vorhandener Berechtigung
+- Serverseitige Rechtepruefung fuer API-Zugriffe und spaetere Schreibaktionen
 
-- AD-Authentifizierung via LDAP in core/auth_service.py
-- AD-Gruppen zu Rollen und Rollen zu Permissions in core/permissions.py
-- Nutanix-Zugriffe in core/nutanix_client.py
-- vSphere-Zugriffe in core/vsphere_client.py
-- Endpoint-, Zenworks- und Citrix-Integrationen in core/external_integration_service.py und core/integration_client.py
-- Gemeinsame Multi-User-Sitzungslogik fuer Citrix-Workflows in core/citrix_worker_session.py
+## Architektur
 
-Die eigentliche Aufgabe ist die saubere Migration von einer lokalen Desktop-App zu einer sicheren Webarchitektur.
+Die Anwendung besteht aus vier Schichten:
 
-## Zielarchitektur
-Die Startpage besteht aus vier Schichten:
+1. Browser-Frontend fuer Navigation, Dashboard und Modulsichten
+2. Dockerisiertes Python-Backend mit Session-Handling und API-Endpunkten
+3. Integrationsschicht fuer containerfaehige Systeme wie Nutanix, Endpoint Central und vSphere
+4. Optionaler Windows-Connector fuer AD-RSAT und Citrix On-Prem
 
-1. Browser-Frontend pro Benutzer
-2. Containerisiertes Web-Backend mit API und Session-Verwaltung
-3. Integrationsschicht fuer Nutanix, Endpoint Central und vSphere
-4. Windows-Connector fuer AD-RSAT- und Citrix-On-Prem-Funktionen
+Warum diese Trennung notwendig ist:
 
-## Warum diese Aufteilung noetig ist
-- LDAP-basierter AD-Login ist containerfaehig
-- Nutanix-, Endpoint-Central- und vSphere-REST-Aufrufe sind grundsaetzlich containerfaehig
-- Viele tiefe AD-Funktionen im bestehenden Projekt nutzen PowerShell mit ActiveDirectory-Modul
-- Citrix-On-Prem nutzt teils OData, teils Remote-PowerShell-Fallbacks gegen Delivery Controller
+- LDAP-Login ist containerfaehig
+- Nutanix-, Endpoint- und vSphere-REST-Zugriffe sind containerfaehig
+- Tiefe AD-Funktionen im Bestand verwenden PowerShell und ActiveDirectory-Module
+- Citrix On-Prem benoetigt je nach Anwendungsfall OData und Windows-nahe PowerShell-Pfade
 
-Ein reiner Linux-Container ist deshalb fuer die komplette Fachlogik nicht ausreichend. Die robuste Zielarchitektur ist ein Web-Backend im Container plus Windows-Connector fuer Spezialfaelle.
+## Module
 
-## Fachliches Zielmodell
+Der aktuelle UI-Aufbau ist auf eine kompakte Operations-Sicht ausgelegt:
 
-### Anmeldung
-- Benutzer ruft lokale Startpage im Browser auf
-- Login mit AD-Admin-Benutzername und Passwort
-- Backend authentifiziert gegen Active Directory via LDAP
-- AD-Gruppen werden geladen und in Rollen und Berechtigungen aufgeloest
-- Pro Benutzer wird eine Session aufgebaut
+- Dashboard
+- ActiveDirectory
+- Nutanix
+- Endpoint Central
+- Citrix
+- Rollout
 
-### Personalisierte Startpage
-- Jeder Benutzer erhaelt eine eigene Startseite
-- Persoenliche Widgets, Favoriten, Kategorien und Schnellzugriffe werden pro Benutzer gespeichert
-- Sichtbare Module und Aktionen ergeben sich aus AD-Gruppen und Rollen
+Innerhalb von ActiveDirectory ist bereits eine Sidebar-Tree-Struktur fuer diese Bereiche vorbereitet:
 
-### Systemzugriffe nach Login
-- Backend nutzt Session, Rollen und Berechtigungen zur Freigabe einzelner API-Aktionen
-- Wo fachlich sinnvoll, werden Benutzer-Credentials sitzungsbasiert weiterverwendet
-- Wo Systeme technische Tokens oder Service-Accounts benoetigen, erfolgt Zugriff ueber dedizierte Backend-Konfiguration
+- AD Users & Computers
+- Auswertungen
+- DNS
+- DHCP
 
-## Authentifizierung und Autorisierung
+## Sicherheit und Berechtigungen
+
+Die Anwendung folgt einem einfachen, klaren Berechtigungsmodell:
+
 - AD-Gruppe -> Rolle
 - Rolle -> Permission-Set
-- Permission-String pro Modul und Aktion, zum Beispiel nutanix.view, vsphere.power_on, citrix.assign_user
+- Permission -> serverseitig gepruefte Aktion
 
-Die Berechtigungen werden nicht nur in der Oberflaeche versteckt, sondern auch serverseitig bei jeder Aktion geprueft.
+Wichtig dabei:
 
-## Zielmodule der Startpage
-- Dashboard: persoenliche Startansicht, Favoriten, Hinweise, Statuskarten, Suchfeld
-- AD: Basisfunktionen wie Benutzer- und Computer-Suche, spaeter Reports und Verwaltungsfunktionen
-- Nutanix: Cluster-, VM- und Image-nahe Informationen
-- Endpoint Central: Geraete- und Patch-Status
-- vSphere: VM-Uebersicht und Betriebsstatus
-- Citrix: Maschinen-, Benutzer- und Session-bezogene Informationen
-
-## Technische Zielarchitektur
-
-### Frontend
-- Browserbasierte Oberflaeche
-- Persoenliches Dashboard pro Benutzer
-- Such- und Kachelkonzept
-- Rechteabhaengige Anzeige von Modulen und Aktionen
-
-### Backend
-- Python-Web-API im Docker-Container
-- Session-Handling, Rollenaufloesung, Benutzerkonfiguration, Audit-Logging
-- Adapter-Schicht fuer externe Systeme
-
-### Windows Connector
-- Eigener Dienst mit API-Vertrag fuer AD-RSAT und Citrix-On-Prem
-- Kann lokal auf Windows oder spaeter als separater Connector-Dienst betrieben werden
-- Wird vom Web-Backend ueber HTTP angesprochen
-
-### Datenhaltung
-- Benutzerprofile und Dashboard-Konfiguration pro Benutzer
-- Rollen- und Mapping-Konfiguration als JSON
-- Spaeter optional SQLite oder PostgreSQL fuer zentrale Ablage
-
-## Sicherheitsprinzipien
-- Keine Speicherung von Passwoertern im Frontend
-- Serverseitige Permission-Pruefung fuer jede schreibende Aktion
-- Auditierbarkeit von administrativen Eingriffen
-- Trennung zwischen Login-Identitaet, Rollenaufloesung und Systemaktionen
-- Keine implizite Freigabe nur wegen sichtbarer UI-Elemente
-
-## Multi-User-Anforderungen
-- Mehrere Benutzer greifen parallel auf dieselbe Startpage-Instanz zu
-- Jeder Benutzer hat eine eigene Konfiguration und eigene Favoriten
-- Berechtigungen werden aus bestehenden AD-Gruppen aufgeloest
-- Gleichzeitige Sessions duerfen sich nicht gegenseitig beeinflussen
-
-## Aktueller Umsetzungsstand
-Vorhanden sind bereits:
-
-- Docker-Compose-Setup fuer das Web-Backend
-- FastAPI-Backend mit Health-Endpoint, Login und per-User-Dashboard-Speicherung
-- Rollen- und Gruppenaufloesung ueber JSON-Konfiguration nach Vorbild Rollout-Monitor
-- Browser-Frontend mit Login, persoenlicher Startseite, Modulfreigaben und Widget-Pflege
-- Integrations-Uebersicht fuer AD, Nutanix, Endpoint Central, vSphere und Citrix
-- Mock- und Live-Modus fuer Integrationen
-- Connector-Client im Backend sowie ein eigener Connector-Prototyp mit API-Vertrag
+- Passwoerter werden nicht im Frontend gespeichert
+- UI-Sichtbarkeit ersetzt keine serverseitige Pruefung
+- Gleichzeitige Benutzer-Sessions muessen strikt getrennt bleiben
+- Schreibende Aktionen werden erst nach expliziter Permission-Freigabe aktiviert
 
 ## Projektstruktur
+
 ```text
 Startpage/
   backend/
@@ -122,64 +84,93 @@ Startpage/
       config/
       services/
       static/
+    Dockerfile
+    requirements.txt
   connector/
     app/
+    Dockerfile
+    requirements.txt
   data/
   docker-compose.yml
   readme.md
 ```
 
-## Start des Prototyps
+## Schnellstart
 
-### Per Docker
-Im Projektordner Startpage:
+### Docker
+
+Im Projektordner:
 
 ```powershell
 docker compose up --build
 ```
 
-Danach ist die Anwendung unter http://localhost:8080 erreichbar.
+Danach ist das Backend samt UI unter `http://localhost:8080` erreichbar.
 
-### Optional mit Connector-Profil
-Wenn der Connector als separater Mock-Dienst mitlaufen soll:
+### Docker mit Connector
+
+Wenn der Connector als separater Dienst mitlaufen soll:
 
 ```powershell
 docker compose --profile connector up --build
 ```
 
-Dann laeuft zusaetzlich der Connector auf http://localhost:8090.
+Dann ist der Connector unter `http://localhost:8090` verfuegbar.
 
 ### Lokale Entwicklung ohne Docker
-Web-Backend im Ordner Startpage\backend:
+
+Backend starten:
 
 ```powershell
+cd backend
 python -m uvicorn app.main:app --reload --host 0.0.0.0 --port 8080
 ```
 
-Connector im Ordner Startpage\connector:
+Connector starten:
 
 ```powershell
+cd connector
 python -m uvicorn app.main:app --reload --host 0.0.0.0 --port 8090
 ```
 
 ## Entwicklungsmodus
-Aktuell ist Mock-Authentifizierung standardmaessig aktiv, solange keine produktive LDAP-Konfiguration gesetzt wird. Zusaetzlich sind Integrationen standardmaessig im Mock-Modus aktiv. Damit kann die Weboberflaeche lokal sofort entwickelt werden.
 
-Fuer den Produktivbetrieb muessen spaeter mindestens Folgendes gesetzt oder sauber konfiguriert werden:
+Fuer lokale Entwicklung ist der Prototyp absichtlich sofort lauffaehig:
 
-- STARTPAGE_ENABLE_MOCK_AUTH=false
-- STARTPAGE_ENABLE_MOCK_INTEGRATIONS=false
-- STARTPAGE_CONNECTOR_ENABLED=true
-- STARTPAGE_CONNECTOR_URL
-- STARTPAGE_LDAP_SERVER
-- STARTPAGE_LDAP_BASE_DN
-- STARTPAGE_LDAP_DOMAIN_SUFFIX
+- Mock-Authentifizierung ist standardmaessig aktiv
+- Integrationen laufen standardmaessig im Mock-Modus
 
-## Naechste technische Schritte
-- Nutanix-, vSphere- und Endpoint-Integrationen von Mock auf Live-Konfiguration umstellen
-- Backend-Endpunkte fuer echte Read-Only-Abfragen haerten und um Timeout-/Fehlerbehandlung erweitern
-- Windows Connector fuer Citrix On-Prem und AD-RSAT-Funktionen schrittweise mit echter PowerShell-/RSAT-Logik hinterlegen
-- Erste schreibende Aktionen nur fuer klar definierte Permissions freischalten
+Fuer produktionsnaehere Tests muessen mindestens diese Variablen gesetzt werden:
 
-## Fazit
-Die Startpage wird als persoenliches, browserbasiertes Admin-Portal mit Docker-Backend gebaut. Die Logik aus dem Rollout-Monitor wird schrittweise in eine Webarchitektur ueberfuehrt. Containerfaehige Integrationen laufen direkt im Backend, AD-RSAT- und Citrix-nahe Spezialfunktionen ueber einen separaten Windows-Connector.
+- `STARTPAGE_ENABLE_MOCK_AUTH=false`
+- `STARTPAGE_ENABLE_MOCK_INTEGRATIONS=false`
+- `STARTPAGE_CONNECTOR_ENABLED=true`
+- `STARTPAGE_CONNECTOR_URL`
+- `STARTPAGE_LDAP_SERVER`
+- `STARTPAGE_LDAP_BASE_DN`
+- `STARTPAGE_LDAP_DOMAIN_SUFFIX`
+
+## Herkunft der Fachlogik
+
+Das Projekt orientiert sich fachlich an Bausteinen aus dem bestehenden Rollout-Monitor. Uebernommen oder als Vorlage verwendet werden vor allem:
+
+- AD-Authentifizierung
+- Rollen- und Permission-Aufloesung
+- Integrationslogik fuer Nutanix, vSphere und weitere Bestandssysteme
+- Citrix-nahe Multi-User- und Connector-Pfade
+
+Das Ziel ist keine 1:1-Portierung der Desktop-Anwendung, sondern eine saubere Ueberfuehrung in eine Webarchitektur.
+
+## Roadmap
+
+Naechste technische Schritte:
+
+- Live-Anbindung fuer Nutanix, vSphere und Endpoint weiter haerten
+- Windows-Connector mit echter AD-RSAT- und Citrix-Logik hinterlegen
+- AD-Unterbereiche wie Reports, DNS und DHCP fachlich ausbauen
+- Erste schreibende Aktionen mit expliziten Permissions freischalten
+- Auditierbarkeit und Fehlerbehandlung erweitern
+
+## Hinweis
+
+Aktuell ist das Projekt ein administrativer Prototyp fuer die interne Betriebsunterstuetzung. Die vorhandenen Mock-Modi sind bewusst fuer Entwicklung und UI-Ausbau vorgesehen und nicht fuer produktiven Betrieb gedacht.
