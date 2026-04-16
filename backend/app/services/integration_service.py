@@ -63,17 +63,31 @@ class IntegrationService:
     ) -> dict[str, Any]:
         system_id = str(definition.get("id", "")).strip()
         title = str(definition.get("title", system_id)).strip() or system_id
+        
+        # Check if mock is disabled for this specific system
+        use_mock = self._mock_enabled or bool(definition.get("mock", False))
+        
+        # If mock is explicitly disabled in config, use live API
+        if "mock" in definition and definition["mock"] is False:
+            use_mock = False
+        
+        # AD uses session context, not direct API
         if system_id == "ad":
             return self._ad_response(definition, user_session, detail=detail)
+        
+        # Citrix can use connector or mock
         if system_id == "citrix":
             return self._citrix_response(
                 definition,
                 detail=detail,
-                allow_mock=self._mock_enabled or bool(definition.get("mock", False)),
+                allow_mock=use_mock,
             )
-        if self._mock_enabled or bool(definition.get("mock", False)):
+        
+        # For other systems, use mock if enabled
+        if use_mock:
             return self._mock_response(definition, detail=detail)
 
+        # Use live API for Nutanix, vSphere, Endpoint
         try:
             if system_id == "nutanix":
                 return self._nutanix_response(definition, user_session.identity.username, session_password, detail=detail)

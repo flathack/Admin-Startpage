@@ -630,6 +630,46 @@ def ad_ous(x_session_token: str | None = Header(default=None)) -> dict[str, Any]
         raise HTTPException(status_code=500, detail=str(exc))
 
 
+@app.get("/api/ad/dns/zones")
+def ad_dns_zones(x_session_token: str | None = Header(default=None)) -> dict[str, Any]:
+    """Get DNS zones from AD."""
+    stored_session = _get_session(x_session_token)
+    user_session = _build_user_session(stored_session)
+    _require_permission(user_session, "ad.dns.read")
+    
+    ad_service = _get_ad_service()
+    if ad_service is None:
+        return {"zones": [], "mode": "mock"}
+    
+    try:
+        ad_service.connect()
+        zones = ad_service.get_dns_zones()
+        ad_service.disconnect()
+        return {"zones": zones, "mode": "live", "count": len(zones)}
+    except ADServiceError as exc:
+        raise HTTPException(status_code=500, detail=str(exc))
+
+
+@app.get("/api/ad/dhcp/servers")
+def ad_dhcp_servers(x_session_token: str | None = Header(default=None)) -> dict[str, Any]:
+    """Get DHCP servers from AD."""
+    stored_session = _get_session(x_session_token)
+    user_session = _build_user_session(stored_session)
+    _require_permission(user_session, "ad.dhcp.read")
+    
+    ad_service = _get_ad_service()
+    if ad_service is None:
+        return {"servers": [], "mode": "mock"}
+    
+    try:
+        ad_service.connect()
+        servers = ad_service.get_dhcp_servers()
+        ad_service.disconnect()
+        return {"servers": servers, "mode": "live", "count": len(servers)}
+    except ADServiceError as exc:
+        raise HTTPException(status_code=500, detail=str(exc))
+
+
 # Citrix On-Prem endpoints (via Connector)
 @app.get("/api/citrix/summary")
 def citrix_summary(x_session_token: str | None = Header(default=None)) -> dict[str, Any]:
