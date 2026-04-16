@@ -13,6 +13,7 @@ const state = {
   rolloutSummary: null,
   rolloutRuntime: null,
   rolloutRuntimeHealth: null,
+  rolloutSyncResult: null,
 };
 
 const NAV_STRUCTURE = [
@@ -119,6 +120,7 @@ function resetClientState() {
   state.rolloutSummary = null;
   state.rolloutRuntime = null;
   state.rolloutRuntimeHealth = null;
+  state.rolloutSyncResult = null;
   elements.appView.classList.add("hidden");
   elements.loginView.classList.remove("hidden");
 }
@@ -458,6 +460,15 @@ function renderRolloutView() {
         ${buildSummaryCard("Aktiv", String(state.rolloutSummary?.runningCount || 0), "Laufende oder vorbereitete Rollout-Workflows.")}
         ${buildSummaryCard("Fehler", String(state.rolloutSummary?.errorCount || 0), "Jobs mit technischem oder fachlichem Fehlerstatus.")}
       </div>
+      ${canManage ? `
+      <div class="section-header">
+        <div>
+          <p class="eyebrow">Runtime Sync</p>
+          <h4 class="section-title">Jobstatus aus Share-Dateien fortschreiben</h4>
+        </div>
+        <button type="button" class="secondary" data-action="sync-all-rollout-jobs">Alle Jobs syncen</button>
+      </div>` : ""}
+      ${state.rolloutSyncResult ? `<div class="note-card">Letzter Sync: ${state.rolloutSyncResult.changedCount || 0} Job(s) geaendert.</div>` : ""}
       <div class="info-card">
         <h4>Runtime Share</h4>
         <div class="chip-list">
@@ -499,6 +510,7 @@ function renderRolloutView() {
               </div>
               <div class="widget-actions">
                 <button type="button" class="secondary" data-action="inspect-rollout-runtime" data-job-id="${job.jobId}">Runtime</button>
+                ${canManage ? `<button type="button" class="secondary" data-action="sync-rollout-job" data-job-id="${job.jobId}">Sync</button>` : ""}
                 ${canManage ? `<button type="button" class="secondary" data-action="send-rollout-control" data-job-id="${job.jobId}" data-control-action="RESUME">Resume</button>` : ""}
                 ${canManage ? `<button type="button" class="secondary" data-action="restart-rollout" data-job-id="${job.jobId}">Reset</button>` : ""}
               </div>
@@ -620,6 +632,20 @@ async function loadRolloutJobs() {
 async function loadRolloutRuntime(jobId) {
   const payload = await request(`/api/rollout/jobs/${jobId}/runtime`);
   state.rolloutRuntime = payload;
+}
+
+async function syncRolloutJob(jobId) {
+  const payload = await request(`/api/rollout/jobs/${jobId}/sync`, { method: "POST" });
+  state.rolloutSummary = payload.summary || state.rolloutSummary;
+  state.rolloutSyncResult = { changedCount: payload.changed ? 1 : 0, changedJobs: payload.changed ? [jobId] : [] };
+  await loadRolloutJobs();
+}
+
+async function syncAllRolloutJobs() {
+  const payload = await request("/api/rollout/jobs/sync", { method: "POST" });
+  state.rolloutJobs = payload.jobs || state.rolloutJobs;
+  state.rolloutSummary = payload.summary || state.rolloutSummary;
+  state.rolloutSyncResult = payload.sync || null;
 }
 
 async function selectIntegration(systemId) {
@@ -835,6 +861,29 @@ elements.contentPrimary.addEventListener("click", async (event) => {
 
   if (target.dataset.action === "inspect-rollout-runtime") {
     loadRolloutRuntime(target.dataset.jobId)
+      .then(() => {
+        renderCurrentView();
+      })
+      .catch((error) => {
+        window.alert(error.message);
+      });
+    return;
+  }
+
+  if (target.dataset.action === "sync-rollout-job") {
+    syncRolloutJob(target.dataset.jobId)
+      .then(async () => {
+        await loadRolloutRuntime(target.dataset.jobId);
+        renderCurrentView();
+      })
+      .catch((error) => {
+        window.alert(error.message);
+      });
+    return;
+  }
+
+  if (target.dataset.action === "sync-all-rollout-jobs") {
+    syncAllRolloutJobs()
       .then(() => {
         renderCurrentView();
       })

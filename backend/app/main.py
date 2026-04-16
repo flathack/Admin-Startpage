@@ -357,6 +357,33 @@ def rollout_job_runtime(job_id: str, x_session_token: str | None = Header(defaul
     return {"runtime": rollout_runtime_service.snapshot_for_job(job)}
 
 
+@app.post("/api/rollout/jobs/{job_id}/sync")
+def rollout_job_sync(job_id: str, x_session_token: str | None = Header(default=None)) -> dict[str, Any]:
+    stored_session = _get_session(x_session_token)
+    user_session = _build_user_session(stored_session)
+    _require_permission(user_session, "rollout.manage")
+    try:
+        job = rollout_service.get_job(job_id)
+    except KeyError as exc:
+        raise HTTPException(status_code=404, detail=f"Unbekannter Rollout-Job: {job_id}") from exc
+    snapshot = rollout_runtime_service.snapshot_for_job(job)
+    result = rollout_service.sync_job_from_runtime(job_id, snapshot)
+    return {"job": result["job"].to_api(), "changed": result["changed"], "summary": rollout_service.summary()}
+
+
+@app.post("/api/rollout/jobs/sync")
+def rollout_jobs_sync(x_session_token: str | None = Header(default=None)) -> dict[str, Any]:
+    stored_session = _get_session(x_session_token)
+    user_session = _build_user_session(stored_session)
+    _require_permission(user_session, "rollout.manage")
+    snapshots: dict[str, dict[str, Any]] = {}
+    for job in rollout_service.list_jobs():
+        snapshots[job.job_id] = rollout_runtime_service.snapshot_for_job(job)
+    sync_result = rollout_service.sync_all_jobs_from_runtime(snapshots)
+    jobs = [job.to_api() for job in rollout_service.list_jobs()]
+    return {"jobs": jobs, "summary": rollout_service.summary(), "sync": sync_result}
+
+
 @app.post("/api/rollout/jobs/{job_id}/control")
 def rollout_job_control(
     job_id: str,
