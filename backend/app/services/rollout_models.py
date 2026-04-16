@@ -32,10 +32,27 @@ class RolloutJob:
     progress: int = 0
     client_mac: str = ""
     machine_uuid: str = ""
+    serial_number: str = ""
     client_stage: str = ""
     client_message: str = ""
+    client_updated_at: float | None = None
+    name_requested: bool = False
+    name_requested_at: float | None = None
+    registered_at: float | None = None
     created_at: float = field(default_factory=time)
     tags: list[str] = field(default_factory=list)
+
+    def update_status(self, status: RolloutStatus, progress: int) -> None:
+        self.status = status
+        self.progress = max(0, min(100, progress))
+
+    def set_registration(self, serial_number: str) -> None:
+        self.serial_number = serial_number.strip()
+        self.registered_at = time()
+
+    def set_name_requested(self) -> None:
+        self.name_requested = True
+        self.name_requested_at = time()
 
     def to_dict(self) -> dict[str, Any]:
         created_at_iso = datetime.fromtimestamp(self.created_at, tz=timezone.utc).isoformat()
@@ -53,8 +70,13 @@ class RolloutJob:
             "progress": self.progress,
             "client_mac": self.client_mac,
             "machine_uuid": self.machine_uuid,
+            "serial_number": self.serial_number,
             "client_stage": self.client_stage,
             "client_message": self.client_message,
+            "client_updated_at": self.client_updated_at,
+            "name_requested": self.name_requested,
+            "name_requested_at": self.name_requested_at,
+            "registered_at": self.registered_at,
             "tags": list(self.tags),
         }
 
@@ -72,8 +94,25 @@ class RolloutJob:
             "progress": self.progress,
             "clientMac": self.client_mac,
             "machineUuid": self.machine_uuid,
+            "serialNumber": self.serial_number,
             "clientStage": self.client_stage,
             "clientMessage": self.client_message,
+            "clientUpdatedAt": (
+                datetime.fromtimestamp(self.client_updated_at, tz=timezone.utc).isoformat()
+                if self.client_updated_at
+                else ""
+            ),
+            "nameRequested": self.name_requested,
+            "nameRequestedAt": (
+                datetime.fromtimestamp(self.name_requested_at, tz=timezone.utc).isoformat()
+                if self.name_requested_at
+                else ""
+            ),
+            "registeredAt": (
+                datetime.fromtimestamp(self.registered_at, tz=timezone.utc).isoformat()
+                if self.registered_at
+                else ""
+            ),
             "tags": list(self.tags),
         }
 
@@ -115,8 +154,13 @@ class RolloutJob:
             progress=max(0, min(100, int(payload.get("progress", 0)))),
             client_mac=str(payload.get("client_mac", "")).strip(),
             machine_uuid=str(payload.get("machine_uuid", "")).strip(),
+            serial_number=str(payload.get("serial_number", "")).strip(),
             client_stage=str(payload.get("client_stage", "")).strip(),
             client_message=str(payload.get("client_message", "")).strip(),
+            client_updated_at=(float(payload["client_updated_at"]) if payload.get("client_updated_at") is not None else None),
+            name_requested=bool(payload.get("name_requested", False)),
+            name_requested_at=(float(payload["name_requested_at"]) if payload.get("name_requested_at") is not None else None),
+            registered_at=(float(payload["registered_at"]) if payload.get("registered_at") is not None else None),
             created_at=float(payload.get("created_at", time())),
             tags=[str(tag).strip() for tag in payload.get("tags", []) if str(tag).strip()],
         )

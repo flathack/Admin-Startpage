@@ -400,7 +400,8 @@ def rollout_job_control(
     result = rollout_runtime_service.write_control_message(job=job, action=payload.action)
     if not result["ok"]:
         raise HTTPException(status_code=400, detail=result["message"])
-    return result
+    updated_job = rollout_service.record_control_action(job_id, payload.action)
+    return {**result, "job": updated_job.to_api(), "summary": rollout_service.summary()}
 
 
 @app.post("/api/rollout/jobs/{job_id}/restart")

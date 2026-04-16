@@ -3,6 +3,7 @@ from __future__ import annotations
 import re
 from collections import Counter
 from copy import deepcopy
+from time import time
 from typing import Any
 
 from .rollout_job_store import RolloutJobStore
@@ -82,6 +83,26 @@ class RolloutService:
         job.progress = 0
         job.client_stage = "Neustart vorbereitet"
         job.client_message = "Job wurde zur erneuten Ausfuehrung zurueckgesetzt."
+        job.client_updated_at = time()
+        self._job_store.save_job(job)
+        return job
+
+    def record_control_action(self, job_id: str, action: str) -> RolloutJob:
+        job = self.get_job(job_id)
+        normalized_action = action.strip().upper()
+        if normalized_action == "ASSIGN":
+            job.set_name_requested()
+            job.client_stage = "Assign gesendet"
+            job.client_message = "Warte auf ACK vom WinPE-Client"
+            job.update_status(RolloutStatus.WAITING_REGISTRATION, max(job.progress, 5))
+        elif normalized_action == "RESUME":
+            job.client_stage = "Resume gesendet"
+            job.client_message = "Warte auf ACK vom WinPE-Client"
+            job.update_status(RolloutStatus.ROLLOUT_RUNNING, max(job.progress, 55))
+        else:
+            job.client_stage = f"Control {normalized_action}"
+            job.client_message = f"Steuerkommando {normalized_action} gesendet"
+        job.client_updated_at = time()
         self._job_store.save_job(job)
         return job
 
@@ -101,16 +122,27 @@ class RolloutService:
         if runtime_machine_uuid and runtime_machine_uuid != job.machine_uuid:
             job.machine_uuid = runtime_machine_uuid
 
+        if ack_payload.get("_mtime"):
+            job.client_updated_at = float(ack_payload["_mtime"])
+
         if ack_payload:
             ack_action = str(ack_payload.get("ACTION", "ACK")).strip().upper() or "ACK"
             job.client_stage = f"ACK {ack_action}"
             job.client_message = "Client hat Steuerkommando bestaetigt"
+            if ack_action == "ASSIGN":
+                job.update_status(RolloutStatus.WAITING_REGISTRATION, max(job.progress, 10))
+            elif ack_action == "RESUME":
+                job.update_status(RolloutStatus.ROLLOUT_RUNNING, max(job.progress, 55))
 
         if status_payload:
             stage = str(status_payload.get("STAGE", "")).strip()
             state = str(status_payload.get("STATE", "")).strip().upper()
             message = str(status_payload.get("MESSAGE", "")).strip()
             progress_raw = str(status_payload.get("PROGRESS", "")).strip()
+            serial_number = str(status_payload.get("SERIAL_NUMBER", "")).strip()
+
+            if status_payload.get("_mtime"):
+                job.client_updated_at = float(status_payload["_mtime"])
 
             if stage:
                 job.client_stage = stage
@@ -118,6 +150,8 @@ class RolloutService:
                 job.client_stage = state
             if message:
                 job.client_message = message
+            if serial_number and serial_number != job.serial_number:
+                job.set_registration(serial_number)
 
             if progress_raw:
                 try:
@@ -125,7 +159,8 @@ class RolloutService:
                 except ValueError:
                     pass
 
-            job.status = self._status_from_runtime(state, job.progress)
+            next_status = self._status_from_runtime(state, job.progress)
+            job.update_status(next_status, job.progress)
 
         changed = before != job.to_dict()
         if changed:
@@ -147,6 +182,8 @@ class RolloutService:
     @staticmethod
     def _status_from_runtime(state: str, progress: int) -> RolloutStatus:
         normalized_state = state.strip().upper()
+        if normalized_state in {"REGISTERED", "REGISTRATION", "ASSIGNED"}:
+            return RolloutStatus.WAITING_REGISTRATION
         if normalized_state in {"DONE", "FINISHED"}:
             return RolloutStatus.SYSPREP_FINISHED
         if normalized_state in {"ERROR", "FAILED", "FAIL"}:

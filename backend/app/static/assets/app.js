@@ -506,11 +506,14 @@ function renderRolloutView() {
                 <p>${job.template} auf ${job.cluster} / ${job.network}</p>
                 <p>Status: ${job.status} | Progress: ${job.progress}%</p>
                 <p>MAC: ${job.clientMac || "unbekannt"}</p>
+                <p>Serial: ${job.serialNumber || "-"}</p>
+                <p>ACK/Reg: ${job.nameRequested ? "angefordert" : "offen"} | ${job.registeredAt || "nicht registriert"}</p>
                 <p>${job.clientMessage || "Noch keine Ausfuehrungsdaten vorhanden."}</p>
               </div>
               <div class="widget-actions">
                 <button type="button" class="secondary" data-action="inspect-rollout-runtime" data-job-id="${job.jobId}">Runtime</button>
                 ${canManage ? `<button type="button" class="secondary" data-action="sync-rollout-job" data-job-id="${job.jobId}">Sync</button>` : ""}
+                ${canManage ? `<button type="button" class="secondary" data-action="send-rollout-control" data-job-id="${job.jobId}" data-control-action="ASSIGN">Assign</button>` : ""}
                 ${canManage ? `<button type="button" class="secondary" data-action="send-rollout-control" data-job-id="${job.jobId}" data-control-action="RESUME">Resume</button>` : ""}
                 ${canManage ? `<button type="button" class="secondary" data-action="restart-rollout" data-job-id="${job.jobId}">Reset</button>` : ""}
               </div>
@@ -551,6 +554,8 @@ function renderRolloutView() {
             <div class="detail-row"><span>Mapping</span><strong>${runtime.mapping?._path || "-"}</strong></div>
             <div class="detail-row"><span>Status-Datei</span><strong>${runtime.status?._path || "-"}</strong></div>
             <div class="detail-row"><span>ACK-Datei</span><strong>${runtime.ack?._path || "-"}</strong></div>
+            <div class="detail-row"><span>ACK Aktion</span><strong>${runtime.ack?.ACTION || "-"}</strong></div>
+            <div class="detail-row"><span>Status</span><strong>${runtime.status?.STATE || "-"}</strong></div>
           </div>
         ` : `<div class="placeholder-block">Noch keine Runtime-Details fuer einen Job geladen.</div>`}
       </div>

@@ -55,7 +55,7 @@ Der aktuelle UI-Aufbau ist auf eine kompakte Operations-Sicht ausgelegt:
 - Citrix
 - Rollout
 
-Im Rollout-Modul koennen bereits erste Jobs persistent im Backend angelegt, gelistet und fuer einen Neustart zurueckgesetzt werden. Zusaetzlich kann die Web-App jetzt Runtime-Dateien aus `NAME-MAP`, `STATUS` und `CONTROL` auslesen, ein erstes `RESUME`-Control-Signal pro Job schreiben und Runtime-Status wieder in den gespeicherten Jobfortschritt zurueckfuehren. Die eigentliche Clone-, WinPE- und Continue-Logik aus Rollout-Monitor folgt in weiteren Schritten.
+Im Rollout-Modul koennen bereits erste Jobs persistent im Backend angelegt, gelistet und fuer einen Neustart zurueckgesetzt werden. Zusaetzlich kann die Web-App jetzt Runtime-Dateien aus `NAME-MAP`, `STATUS` und `CONTROL` auslesen, `ASSIGN`- und `RESUME`-Signale pro Job schreiben, ACK-/Registrierungsdaten auswerten und Runtime-Status wieder in den gespeicherten Jobfortschritt zurueckfuehren. Die eigentliche Clone-, WinPE- und Continue-Logik aus Rollout-Monitor folgt in weiteren Schritten.
 
 Innerhalb von ActiveDirectory ist bereits eine Sidebar-Tree-Struktur fuer diese Bereiche vorbereitet:
 
